@@ -1,0 +1,11 @@
+{
+  "schema_version": "1",
+  "plan_id": "research-demo",
+  "revision": 1,
+  "tasks": [
+    {"task_id": "research-a", "kind": "research", "handler": "fake-research-v1", "instructions": "Read fixture A and return supported claims with provenance.", "depends_on": [], "input_artifacts": [], "capabilities": ["fixture.read"], "timeout_seconds": 120, "context_token_limit": 4000, "retry": {"max_attempts": 3, "initial_backoff_seconds": 1, "max_backoff_seconds": 30}},
+    {"task_id": "research-b", "kind": "research", "handler": "fake-research-v1", "instructions": "Read fixture B and return supported claims with provenance.", "depends_on": [], "input_artifacts": [], "capabilities": ["fixture.read"], "timeout_seconds": 120, "context_token_limit": 4000, "retry": {"max_attempts": 3, "initial_backoff_seconds": 1, "max_backoff_seconds": 30}},
+    {"task_id": "review", "kind": "evidence_review", "handler": "fake-review-v1", "instructions": "Compare both research outputs; identify unsupported and conflicting claims.", "depends_on": ["research-a", "research-b"], "input_artifacts": [], "capabilities": [], "timeout_seconds": 120, "context_token_limit": 8000, "retry": {"max_attempts": 2, "initial_backoff_seconds": 1, "max_backoff_seconds": 10}},
+    {"task_id": "report", "kind": "report_writer", "handler": "fake-writer-v1", "instructions": "Write a cited report preserving unresolved conflicts from review.", "depends_on": ["research-a", "research-b", "review"], "input_artifacts": [], "capabilities": [], "timeout_seconds": 120, "context_token_limit": 12000, "retry": {"max_attempts": 2, "initial_backoff_seconds": 1, "max_backoff_seconds": 10}}
+  ]
+}
