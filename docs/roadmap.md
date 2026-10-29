@@ -1,8 +1,8 @@
 # Implementation roadmap
 
-0. **Design foundation:** contracts, graph validation, architecture decisions,
+0. **Design foundation (implemented):** contracts, graph validation, architecture decisions,
    state machines, threat model, and acceptance scenarios.
-1. **Durable core:** PostgreSQL migrations, submission/status API, fake worker,
+1. **Durable core (implemented):** PostgreSQL migrations, submission/status API, fake worker,
    attempt leases, crash recovery, artifacts, events, and integration tests.
 2. **DAG execution:** concurrent workers, dependency scheduling, retry backoff,
    deadlines, cancellation, fail-fast draining, and race tests.

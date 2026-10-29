@@ -2,8 +2,19 @@
 
 A platform that separates agent reasoning from durable, policy-controlled execution.
 
-Milestone 0 defines contracts and failure semantics. No API, scheduler, model calls,
-or deployment resources are implemented yet.
+Milestones 0 and 1 provide the design contracts and a PostgreSQL-backed execution
+core with an API, deterministic workers, leases, retries, and crash recovery.
+Model calls, external tools, and Azure deployment are later milestones.
+
+## Run the platform
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build -d
+```
+
+See the [milestone 1 guide](docs/milestone-1.md) for task submission, report retrieval,
+local Python setup, integration tests, and a worker-kill recovery demonstration.
 
 ## Design
 
@@ -22,12 +33,13 @@ Use Python 3.10 or newer:
 
 ```powershell
 python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-Tests validate the example against JSON Schema and exercise graph validation.
-Runtime behavior described in the acceptance scenarios remains to be implemented.
+Tests validate contracts and local artifact integrity. Set `TEST_DATABASE_URL` to
+run the PostgreSQL integration and subprocess crash-recovery tests; see the guide.
 
 ## Repository layout
 
@@ -35,9 +47,9 @@ Runtime behavior described in the acceptance scenarios remains to be implemented
 contracts/v1/       Versioned wire contracts
 docs/              Architecture, decisions, and acceptance criteria
 examples/          Deterministic workflow fixtures
-src/aep/           Shared contract validation; later runtime modules live here
-tests/             Contract checks; later integration and failure-injection tests
+src/aep/           API, execution core, workers, storage, migrations, and contracts
+tests/             Contract, storage, API, PostgreSQL, and crash-recovery checks
 ```
 
-Planned runtime modules are `orchestration`, `execution`, `gateway`, and `storage`.
-They will be added when implemented, rather than represented by empty services.
+The planner and handlers are deterministic fixtures. Gateway and real agent
+orchestration modules will be added in later milestones.

@@ -1,8 +1,10 @@
 # Execution state machines
 
 All transitions are durable compare-and-set operations with an event appended in
-the same transaction. Terminal states are immutable. Runtime SQL and database
-constraints will implement these rules in milestone 1.
+the same transaction. Terminal states are immutable through the execution API.
+Milestone 1 implements leases, retries, dependency admission, deadlines, and
+fail-fast draining. Explicit user cancellation, approvals, and operation
+reconciliation remain later milestones; their states below are design contracts.
 
 ## Run
 

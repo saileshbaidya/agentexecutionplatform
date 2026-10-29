@@ -53,7 +53,11 @@ new run; plan revision migration and dynamic graph expansion are deferred.
 The planner itself is represented by the run's PLANNING phase, with recorded
 operations subject to the same gateway and accounting rules as task operations.
 
-## Persistent records planned for milestone 1
+## Persistent records
+
+Milestone 1 implements Run, Task, Dependency, Attempt, Artifact, and Event records.
+Operation, Budget reservation, Usage ledger, and Approval records below describe
+the later accounting and tool-gateway milestones; they are not in the current schema.
 
 | Record | Purpose and important constraints |
 | --- | --- |

@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-execution-platform"
+version = "0.1.0"
+description = "Durable execution core for an agent orchestration platform"
+requires-python = ">=3.10"
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+aep = ["migrations/*.sql"]
+
+[tool.setuptools.data-files]
+"share/aep/contracts" = ["contracts/v1/platform.schema.json"]

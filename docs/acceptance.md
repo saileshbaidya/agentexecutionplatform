@@ -1,6 +1,8 @@
 # Acceptance scenarios
 
-These are implementation gates, not claims of completed runtime tests.
+These are implementation gates. Milestone 0 and the durable core subset are now
+covered by automated tests; the full remaining scenarios are future gates. See
+[milestone 1](milestone-1.md) for implemented scope and how to run integration tests.
 
 ## Milestone 0 (implemented contract checks)
 

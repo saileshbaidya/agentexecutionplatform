@@ -2,11 +2,22 @@
 
 import json
 from pathlib import Path
+import sys
 
 from jsonschema import Draft202012Validator
 
 
 SCHEMA_PATH = Path(__file__).resolve().parents[2] / "contracts/v1/platform.schema.json"
+if not SCHEMA_PATH.exists():
+    SCHEMA_PATH = Path(sys.prefix) / "share/aep/contracts/platform.schema.json"
+
+
+def validate_message(message: dict, definition: str) -> None:
+    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    schema["$ref"] = f"#/$defs/{definition}"
+    errors = sorted(Draft202012Validator(schema).iter_errors(message), key=lambda e: str(e.path))
+    if errors:
+        raise ValueError(f"Invalid {definition}: {errors[0].message}")
 
 
 def validate_plan(plan: dict) -> None:
