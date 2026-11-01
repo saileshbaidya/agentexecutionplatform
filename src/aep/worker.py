@@ -43,6 +43,10 @@ def run_claim(engine, claim, stop):
         log.info("attempt.succeeded run=%s task=%s attempt=%s", claim["run_id"], claim["task_id"], claim["attempt_id"])
     except LeaseLost:
         log.info("attempt.abandoned run=%s attempt=%s", claim["run_id"], claim["attempt_id"])
+        try:
+            engine.acknowledge_stop(claim)
+        except psycopg.Error:
+            log.warning("attempt.stop_not_committed attempt=%s", claim["attempt_id"])
     except psycopg.Error:
         # A commit can have an unknown outcome. Never record failure on a new
         # connection as if the old commit were known to have failed.
@@ -70,7 +74,8 @@ def run_worker(settings, stop=None, once=False, worker_id=None):
     worker_id = worker_id or str(uuid4())
     while not stop.is_set():
         try:
-            engine.maintain()
+            if settings.worker_maintenance:
+                engine.maintain()
             claim = engine.claim(worker_id)
             if claim:
                 run_claim(engine, claim, stop)

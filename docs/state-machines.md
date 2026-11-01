@@ -2,8 +2,8 @@
 
 All transitions are durable compare-and-set operations with an event appended in
 the same transaction. Terminal states are immutable through the execution API.
-Milestone 1 implements leases, retries, dependency admission, deadlines, and
-fail-fast draining. Explicit user cancellation, approvals, and operation
+Milestones 1–2 implement leases, retries, dependency admission, deadlines,
+fail-fast draining, and explicit user cancellation. Approvals and operation
 reconciliation remain later milestones; their states below are design contracts.
 
 ## Run

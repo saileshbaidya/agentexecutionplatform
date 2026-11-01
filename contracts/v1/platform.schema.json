@@ -23,6 +23,8 @@
         "request": {"type": "string", "minLength": 1, "maxLength": 100000},
         "budget_micro_usd": {"$ref": "#/$defs/money"},
         "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
+        "max_concurrency": {"type": "integer", "minimum": 1, "maximum": 32},
+        "plan": {"$ref": "#/$defs/plan"},
         "input_artifacts": {"type": "array", "items": {"$ref": "#/$defs/artifactRef"}, "maxItems": 100}
       }
     },

@@ -14,6 +14,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", default="http://127.0.0.1:8000")
     parser.add_argument("--timeout", type=float, default=60)
+    parser.add_argument("--check-parallelism", action="store_true", help="Require two workers and overlapping research attempts")
+    parser.add_argument("--check-cancellation", action="store_true", help="Cancel an active run; use a nonzero fake handler delay")
     args = parser.parse_args()
     key = os.environ.get("AEP_API_KEY")
     if not key:
@@ -64,8 +66,39 @@ def main():
     _, history, _, _ = request(path + "/events?limit=1000")
     if history["events"][-1]["kind"] != "run.succeeded":
         raise RuntimeError("Missing terminal event")
+    if args.check_parallelism:
+        roots = [a for a in run["attempts"] if a["task_id"] in {"research-a", "research-b"} and a["state"] == "SUCCEEDED"]
+        if len(roots) != 2 or max(a["started_at"] for a in roots) >= min(a["finished_at"] for a in roots):
+            raise RuntimeError("Research tasks did not overlap; start two workers with a nonzero fake delay")
+        review = next(a for a in run["attempts"] if a["task_id"] == "review" and a["state"] == "SUCCEEDED")
+        if review["started_at"] < max(a["finished_at"] for a in roots):
+            raise RuntimeError("Evidence review ran before its dependencies finished")
+    if args.check_cancellation:
+        _, cancellation, _, _ = request("/runs", dict(submission, idempotency_key="cancel-" + uuid4().hex))
+        cancel_path = "/runs/" + cancellation["run_id"]
+        deadline = time.monotonic() + args.timeout
+        while time.monotonic() < deadline:
+            _, active, _, _ = request(cancel_path)
+            if any(t["state"] == "RUNNING" for t in active["tasks"]):
+                break
+            if active["state"] in {"SUCCEEDED", "FAILED", "CANCELLED"}:
+                raise RuntimeError("Run finished before cancellation; use a nonzero fake delay")
+            time.sleep(0.05)
+        else:
+            raise RuntimeError("No active task appeared for cancellation")
+        request(cancel_path + "/cancel", {})
+        while time.monotonic() < deadline:
+            _, stopped, _, _ = request(cancel_path)
+            if stopped["state"] == "CANCELLED":
+                break
+            time.sleep(0.1)
+        else:
+            raise RuntimeError("Cancellation did not finish before timeout")
+        if stopped["final_artifact_id"] or any(a["started_at"] > stopped["cancel_requested_at"] for a in stopped["attempts"]):
+            raise RuntimeError("Cancelled run published a final artifact or admitted new work")
     print(json.dumps({"run_id": run["id"], "state": run["state"],
                       "attempts": len(run["attempts"]), "events": len(history["events"]),
+                      "parallelism_checked": args.check_parallelism, "cancellation_checked": args.check_cancellation,
                       "artifact_sha256": hashlib.sha256(raw).hexdigest()}))
 
 

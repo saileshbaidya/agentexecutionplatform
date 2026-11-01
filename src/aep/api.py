@@ -46,7 +46,7 @@ def create_app(settings=None):
     @app.get("/health/ready")
     def ready():
         with connect(settings.database_url) as conn:
-            if not conn.execute("SELECT 1 FROM schema_migrations WHERE name='001_core.sql'").fetchone():
+            if not conn.execute("SELECT 1 FROM schema_migrations WHERE name='002_dag_scheduling.sql'").fetchone():
                 raise HTTPException(status_code=503, detail="Migrations not applied")
         return {"status": "ready"}
 
@@ -68,6 +68,11 @@ def create_app(settings=None):
     @app.get("/runs/{run_id}", dependencies=[Depends(authenticated)])
     def status(run_id: UUID):
         return jsonable_encoder(engine.status(run_id))
+
+    @app.post("/runs/{run_id}/cancel", dependencies=[Depends(authenticated)])
+    def cancel(run_id: UUID):
+        outcome = engine.cancel(run_id)
+        return JSONResponse(status_code=202 if outcome["state"] == "CANCELLING" else 200, content=outcome)
 
     @app.get("/runs/{run_id}/events", dependencies=[Depends(authenticated)])
     def events(run_id: UUID, after: int = Query(default=0, ge=0), limit: int = Query(default=100, ge=1, le=1000)):

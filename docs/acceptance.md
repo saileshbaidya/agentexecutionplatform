@@ -1,8 +1,8 @@
 # Acceptance scenarios
 
-These are implementation gates. Milestone 0 and the durable core subset are now
-covered by automated tests; the full remaining scenarios are future gates. See
-[milestone 1](milestone-1.md) for implemented scope and how to run integration tests.
+These are implementation gates. Milestones 0–2 are covered by automated tests;
+budget, policy, agent quality, evaluation, and Azure scenarios remain future gates.
+See [milestone 1](milestone-1.md) and [milestone 2](milestone-2.md) for scope and tests.
 
 ## Milestone 0 (implemented contract checks)
 

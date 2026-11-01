@@ -24,6 +24,7 @@ services:
       AEP_LEASE_SECONDS: ${AEP_LEASE_SECONDS:-15}
       AEP_POLL_SECONDS: ${AEP_POLL_SECONDS:-1}
       AEP_FAKE_DELAY_SECONDS: ${AEP_FAKE_DELAY_SECONDS:-0}
+      AEP_RUN_CONCURRENCY_LIMIT: ${AEP_RUN_CONCURRENCY_LIMIT:-4}
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,9 +41,21 @@ services:
   worker:
     build: .
     command: ["python", "-m", "aep", "worker"]
-    environment: *runtime
+    environment:
+      <<: *runtime
+      AEP_WORKER_MAINTENANCE: "false"
     volumes:
       - artifacts:/artifacts
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      scheduler:
+        condition: service_started
+    restart: unless-stopped
+  scheduler:
+    build: .
+    command: ["python", "-m", "aep", "scheduler"]
+    environment: *runtime
     depends_on:
       migrate:
         condition: service_completed_successfully

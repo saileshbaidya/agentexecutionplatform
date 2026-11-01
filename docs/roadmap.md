@@ -4,7 +4,7 @@
    state machines, threat model, and acceptance scenarios.
 1. **Durable core (implemented):** PostgreSQL migrations, submission/status API, fake worker,
    attempt leases, crash recovery, artifacts, events, and integration tests.
-2. **DAG execution:** concurrent workers, dependency scheduling, retry backoff,
+2. **DAG execution (implemented):** concurrent workers, dependency scheduling, retry backoff,
    deadlines, cancellation, fail-fast draining, and race tests.
 3. **Budget control:** operation admission, atomic reservations, ledger,
    reconciliation, bounded provider adapter contract, and concurrency tests.

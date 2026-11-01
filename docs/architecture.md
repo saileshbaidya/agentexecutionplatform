@@ -40,8 +40,11 @@ No Redis, broker, Kubernetes, or vector database is required for the initial sco
    as a failed run; planning is not an untracked prelude to execution.
 3. Validate the entire plan and store it atomically with tasks and dependencies.
    A failed admission creates no executable tasks.
-4. A scheduler makes dependency-satisfied tasks ready. Workers claim tasks with
+4. A scheduler makes dependency-satisfied tasks ready, expires abandoned attempts,
+   and enforces task/run deadlines independently of handler execution. Workers claim tasks with
    expiring leases and monotonically increasing fencing tokens.
+   Run-row locks enforce persisted per-run concurrency limits. Claims prefer
+   least-recently-claimed eligible runs. Each attempt snapshots ancestor outputs.
 5. Each model or tool operation goes through admission for permission and budget.
 6. Workers persist outputs and commit completion under a valid lease. Scheduling
    uses committed database state, never worker-local observations.
@@ -52,6 +55,9 @@ Version 1 accepts a single immutable plan revision per run. Replanning requires 
 new run; plan revision migration and dynamic graph expansion are deferred.
 The planner itself is represented by the run's PLANNING phase, with recorded
 operations subject to the same gateway and accounting rules as task operations.
+The current fixed planner has no external operations: its PLANNING phase and graph
+admission share a single transaction. Optional submitted plans use the same
+validation and admission path. Model planning and gateway accounting are deferred.
 
 ## Persistent records
 

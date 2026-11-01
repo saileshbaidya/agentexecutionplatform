@@ -5,6 +5,10 @@ Other messages reference `$defs/submission`, `$defs/taskResult`, or `$defs/revie
 Unknown fields are rejected; incompatible changes require a new contract version.
 The schema is a wire contract, not a database migration.
 
+Milestone 2 adds optional `plan` and `max_concurrency` submission fields. Existing
+submissions remain valid. Supplied plans must also satisfy the restricted trusted
+handler registry in `src/aep/planner.py`.
+
 `src/aep/contracts.py` adds cross-task graph validation that JSON Schema cannot
 express. Both schema and semantic validation are mandatory at admission.
 
@@ -12,8 +16,10 @@ express. Both schema and semantic validation are mandatory at admission.
 - Handler IDs resolve to a trusted versioned registry; plans cannot supply code.
 - Capabilities are requested privileges, intersected with owner and deployment
   policy. Inclusion in a plan does not grant permission.
-- `depends_on` controls readiness and exposes dependency output artifact references
-  to context assembly. `input_artifacts` references already-persisted inputs.
+- `depends_on` controls readiness. Each attempt snapshots all successful ancestor
+  results and artifact references for context assembly, deduplicated by task ID.
+  `input_artifacts` is reserved for persisted inputs; nonempty external references
+  are not yet accepted by the runtime.
 - Every accepted DAG has exactly one sink, a report writer. Therefore all tasks
   lead to that writer. A review task must be a direct writer dependency and have
   all research tasks among its ancestors. V1 has one report writer and one review.

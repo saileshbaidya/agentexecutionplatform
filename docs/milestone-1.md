@@ -1,5 +1,9 @@
 # Milestone 1: durable execution core
 
+This guide records the milestone 1 foundation. The current deployment also includes
+[milestone 2](milestone-2.md): dedicated scheduling, custom DAGs, per-run concurrency
+limits, and explicit cancellation. Compose workers now use the dedicated scheduler.
+
 ## Implemented scope
 
 - PostgreSQL migration with checksum verification and an advisory migration lock.
@@ -166,9 +170,10 @@ Orphan files from failed/stale completions are invisible through the API. Automa
 orphan collection is deferred; do not delete files while workers may publish them.
 
 The scheduler scans active runs and opens short connections; this favors clarity
-over high throughput. Fairness, resource concurrency limits, explicit user
-cancellation, dependency policy expansion, and scheduler scaling belong to milestone
-2. Budgets are recorded but not yet enforced: only free local handlers are enabled.
+over high throughput. Milestone 2 adds per-run concurrency limits, best-effort run
+fairness, a dedicated scheduler, and explicit user cancellation. Expanded dependency
+policies and large-scale scheduling remain deferred. Budgets are recorded but not
+yet enforced: only free local handlers are enabled.
 There are no model calls, tool side effects, approvals, operation ledger, sandboxed
 code execution, or Azure deployment. Operation reconciliation remains a later
 requirement before any external side-effecting tools are enabled.
