@@ -9,6 +9,11 @@ Milestone 2 adds optional `plan` and `max_concurrency` submission fields. Existi
 submissions remain valid. Supplied plans must also satisfy the restricted trusted
 handler registry in `src/aep/planner.py`.
 
+Milestone 3 adds optional task `paid_call` fixtures, a monetary upper bound of
+9,000,000,000,000,000 micro-USD, and an `adjustment` message. Runtime validation
+rejects floating-point coercion (including `1.0`) for integer fields. Only the
+bounded `fake-v1` provider is enabled. Quotes and price versions are server-owned.
+
 `src/aep/contracts.py` adds cross-task graph validation that JSON Schema cannot
 express. Both schema and semantic validation are mandatory at admission.
 

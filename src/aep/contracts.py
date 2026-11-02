@@ -5,6 +5,13 @@ from pathlib import Path
 import sys
 
 from jsonschema import Draft202012Validator
+from jsonschema.validators import extend
+
+
+# JSON Schema normally treats 1.0 as an integer. Currency, token counts, and
+# execution limits must arrive as actual integers, avoiding float coercion.
+StrictValidator = extend(Draft202012Validator, type_checker=Draft202012Validator.TYPE_CHECKER.redefine(
+    "integer", lambda checker, value: type(value) is int))
 
 
 SCHEMA_PATH = Path(__file__).resolve().parents[2] / "contracts/v1/platform.schema.json"
@@ -15,7 +22,7 @@ if not SCHEMA_PATH.exists():
 def validate_message(message: dict, definition: str) -> None:
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     schema["$ref"] = f"#/$defs/{definition}"
-    errors = sorted(Draft202012Validator(schema).iter_errors(message), key=lambda e: str(e.path))
+    errors = sorted(StrictValidator(schema).iter_errors(message), key=lambda e: str(e.path))
     if errors:
         raise ValueError(f"Invalid {definition}: {errors[0].message}")
 
@@ -23,7 +30,7 @@ def validate_message(message: dict, definition: str) -> None:
 def validate_plan(plan: dict) -> None:
     """Raise ValueError for schema or DAG violations. Do not mutate the plan."""
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
-    errors = sorted(Draft202012Validator(schema).iter_errors(plan), key=lambda e: str(e.path))
+    errors = sorted(StrictValidator(schema).iter_errors(plan), key=lambda e: str(e.path))
     if errors:
         raise ValueError(f"Invalid plan schema: {errors[0].message}")
 

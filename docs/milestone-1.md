@@ -1,5 +1,8 @@
 # Milestone 1: durable execution core
 
+Shared budget enforcement for synthetic provider calls is now implemented in
+[milestone 3](milestone-3.md); the original workflow remains free.
+
 This guide records the milestone 1 foundation. The current deployment also includes
 [milestone 2](milestone-2.md): dedicated scheduling, custom DAGs, per-run concurrency
 limits, and explicit cancellation. Compose workers now use the dedicated scheduler.

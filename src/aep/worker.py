@@ -9,6 +9,7 @@ import psycopg
 
 from .execution import Execution, LeaseLost
 from .handlers import execute
+from .budgets import BudgetDenied, Budgets, OperationPending, ProviderFailure
 
 
 log = logging.getLogger(__name__)
@@ -36,11 +37,28 @@ def run_claim(engine, claim, stop):
                 raise LeaseLost("Worker stopped or lease lost")
         if lost.is_set() or stop.is_set():
             raise LeaseLost("Worker stopped or lease lost")
+        paid_result = None
+        if "paid_call" in claim["spec"]:
+            paid_result = Budgets(engine).call(claim, claim["spec"]["paid_call"])
         output = execute(claim)
+        if paid_result is not None:
+            output["paid_operation"] = paid_result
         if lost.is_set() or stop.is_set():
             raise LeaseLost("Worker stopped or lease lost")
         engine.complete(claim, output)
         log.info("attempt.succeeded run=%s task=%s attempt=%s", claim["run_id"], claim["task_id"], claim["attempt_id"])
+    except OperationPending as pending:
+        log.info("attempt.waiting_for_operation run=%s operation=%s", claim["run_id"], pending.operation_id)
+        try:
+            engine.wait_for_operation(claim, pending.operation_id)
+        except (LeaseLost, psycopg.Error):
+            log.warning("attempt.wait_not_committed attempt=%s", claim["attempt_id"])
+    except (BudgetDenied, ProviderFailure) as denied:
+        log.info("attempt.paid_call_denied run=%s reason=%s", claim["run_id"], denied.code)
+        try:
+            engine.fail(claim, reason=denied.code, retryable=False)
+        except (LeaseLost, psycopg.Error):
+            log.warning("attempt.failure_not_committed attempt=%s", claim["attempt_id"])
     except LeaseLost:
         log.info("attempt.abandoned run=%s attempt=%s", claim["run_id"], claim["attempt_id"])
         try:

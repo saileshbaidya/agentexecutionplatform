@@ -2,6 +2,7 @@
 
 
 from .contracts import validate_plan
+from .providers import quote_call
 
 
 HANDLERS = {
@@ -23,6 +24,8 @@ def validate_executable_plan(plan):
             raise ValueError(f"Unsupported capabilities for {task['task_id']}")
         if task["input_artifacts"]:
             raise ValueError("External input artifact ingestion is not implemented")
+        if "paid_call" in task:
+            quote_call(task["paid_call"])
 
 
 def make_plan():

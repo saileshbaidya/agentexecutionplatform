@@ -1,8 +1,9 @@
 # Acceptance scenarios
 
-These are implementation gates. Milestones 0–2 are covered by automated tests;
-budget, policy, agent quality, evaluation, and Azure scenarios remain future gates.
-See [milestone 1](milestone-1.md) and [milestone 2](milestone-2.md) for scope and tests.
+These are implementation gates. Milestones 0–3 are covered by automated tests;
+security policy, agent quality, evaluation, and Azure scenarios remain future gates.
+See [milestone 1](milestone-1.md), [milestone 2](milestone-2.md), and
+[milestone 3](milestone-3.md) for scope and tests.
 
 ## Milestone 0 (implemented contract checks)
 

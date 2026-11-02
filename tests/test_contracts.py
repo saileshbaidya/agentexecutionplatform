@@ -7,7 +7,8 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from aep.contracts import SCHEMA_PATH, validate_plan
+from aep.contracts import SCHEMA_PATH, validate_message, validate_plan
+from aep.planner import validate_executable_plan
 from jsonschema import Draft202012Validator
 
 
@@ -22,6 +23,22 @@ class PlanContractTests(unittest.TestCase):
         original = copy.deepcopy(self.plan)
         validate_plan(self.plan)
         self.assertEqual(original, self.plan)
+
+    def test_paid_example_is_valid_for_the_registered_provider(self):
+        plan = json.loads((ROOT / "examples/paid-research-plan.json").read_text())
+        validate_executable_plan(plan)
+
+    def test_currency_and_usage_reject_float_coercion(self):
+        message = {"schema_version": "1", "idempotency_key": "strict", "request": "test", "budget_micro_usd": 1.0, "timeout_seconds": 60}
+        with self.assertRaises(ValueError):
+            validate_message(message, "submission")
+        plan = json.loads((ROOT / "examples/paid-research-plan.json").read_text())
+        for field, value in (("max_cost_micro_usd", 60.0), ("output_tokens", 4.0)):
+            with self.subTest(field=field):
+                changed = copy.deepcopy(plan)
+                changed["tasks"][0]["paid_call"][field] = value
+                with self.assertRaises(ValueError):
+                    validate_executable_plan(changed)
 
     def test_submission_and_result_contracts(self):
         schema = json.loads(SCHEMA_PATH.read_text())

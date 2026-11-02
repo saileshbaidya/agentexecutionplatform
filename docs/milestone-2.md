@@ -1,5 +1,8 @@
 # Milestone 2: DAG scheduling and cancellation
 
+[Milestone 3](milestone-3.md) additionally implements shared spending controls,
+synthetic paid calls, and reconciliation of uncertain charges after cancellation.
+
 Milestone 2 adds a dedicated scheduler, custom validated plans, persisted per-run
 concurrency limits, cancellation, and durable input snapshots. Workers remain
 separate processes, each executing one task at a time. No model or paid tool calls

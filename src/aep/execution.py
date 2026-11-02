@@ -70,6 +70,8 @@ class Execution:
             if run["input_hash"] != digest:
                 raise Conflict("Idempotency key already used with different input")
             if created:
+                conn.execute("INSERT INTO budget_accounts(run_id,limit_micro_usd) VALUES (%s,%s)",
+                             (run["id"], submission["budget_micro_usd"]))
                 event(conn, run["id"], "run.submitted", actor=owner)
             return str(run["id"]), bool(created)
 
@@ -86,6 +88,8 @@ class Execution:
                 FROM tasks WHERE run_id=%s ORDER BY id""", (run_id,)).fetchall()
             run["attempts"] = conn.execute("""SELECT id,task_id,number,worker_id,state,started_at,
                 lease_expires_at,finished_at,error,input_snapshot FROM attempts WHERE run_id=%s ORDER BY started_at,id""", (run_id,)).fetchall()
+            from .budgets import account_snapshot
+            run["budget"] = account_snapshot(conn, run_id)
             return run
 
     def cancel(self, run_id, owner="local"):
@@ -127,6 +131,9 @@ class Execution:
 
     def maintain(self):
         """Recover submitted runs and expired work. Safe for multiple schedulers."""
+        from .budgets import Budgets
+        # Accounting reconciliation also scans liabilities on terminal runs.
+        Budgets(self).reconcile_pending()
         with connect(self.settings.database_url) as conn:
             ids = conn.execute("SELECT id FROM runs WHERE state IN ('SUBMITTED','RUNNING','CANCELLING') ORDER BY created_at").fetchall()
         for row in ids:
@@ -193,19 +200,29 @@ class Execution:
                 self._retry_or_fail(conn, run_id, task, "task_timeout", now)
             if task["state"] != "RUNNING":
                 continue
-            attempt = conn.execute("SELECT * FROM attempts WHERE run_id=%s AND task_id=%s AND state='ACTIVE'", (run_id, task["id"])).fetchone()
-            if attempt["lease_expires_at"] > now and not timed_out:
-                continue
+            attempt = conn.execute("SELECT * FROM attempts WHERE run_id=%s AND task_id=%s AND state IN ('ACTIVE','RECONCILIATION')", (run_id, task["id"])).fetchone()
             draining = run["state"] == "CANCELLING" or run["failure"]
-            attempt_state = "CANCELLED" if draining else ("FAILED" if timed_out else "EXPIRED")
+            unsettled = conn.execute("SELECT 1 FROM operations WHERE run_id=%s AND task_id=%s AND state IN ('DISPATCHED','UNKNOWN') LIMIT 1", (run_id, task["id"])).fetchone()
+            if attempt["state"] == "RECONCILIATION":
+                if unsettled and not timed_out and not draining:
+                    continue
+            elif attempt["lease_expires_at"] > now and not timed_out:
+                continue
+            elif unsettled and not timed_out and not draining:
+                conn.execute("UPDATE attempts SET state='RECONCILIATION',error='operation_outcome_unknown' WHERE id=%s", (attempt["id"],))
+                event(conn, run_id, "attempt.reconciliation", task_id=task["id"], attempt_id=attempt["id"])
+                continue
+            reconciled = attempt["state"] == "RECONCILIATION"
+            attempt_state = "CANCELLED" if draining else ("FAILED" if timed_out or reconciled else "EXPIRED")
+            reason = "task_timeout" if timed_out else "operation_reconciled" if reconciled else "lease_expired"
             conn.execute("UPDATE attempts SET state=%s,finished_at=%s,error=%s WHERE id=%s",
-                         (attempt_state, now, "task_timeout" if timed_out else "lease_expired", attempt["id"]))
+                         (attempt_state, now, reason, attempt["id"]))
             event(conn, run_id, "attempt." + attempt_state.lower(), task_id=task["id"], attempt_id=attempt["id"])
             if draining:
                 conn.execute("UPDATE tasks SET state='CANCELLED' WHERE run_id=%s AND id=%s", (run_id, task["id"]))
                 event(conn, run_id, "task.cancelled", task_id=task["id"])
             else:
-                self._retry_or_fail(conn, run_id, task, "task_timeout" if timed_out else "lease_expired", now)
+                self._retry_or_fail(conn, run_id, task, reason, now)
         # Re-read failure, since retry exhaustion above may have started fail-fast drain.
         run = conn.execute("SELECT * FROM runs WHERE id=%s", (run_id,)).fetchone()
         if run["failure"] or run["state"] == "CANCELLING":
@@ -213,7 +230,7 @@ class Execution:
                 AND state IN ('BLOCKED','READY','RETRY_WAIT') RETURNING id""", (run_id,)).fetchall()
             for task in cancelled:
                 event(conn, run_id, "task.cancelled", task_id=task["id"])
-            active = conn.execute("SELECT 1 FROM attempts WHERE run_id=%s AND state='ACTIVE' LIMIT 1", (run_id,)).fetchone()
+            active = conn.execute("SELECT 1 FROM attempts WHERE run_id=%s AND state IN ('ACTIVE','RECONCILIATION') LIMIT 1", (run_id,)).fetchone()
             if not active:
                 terminal = "CANCELLED" if run["state"] == "CANCELLING" else "FAILED"
                 conn.execute("UPDATE runs SET state=%s WHERE id=%s", (terminal, run_id))
@@ -328,6 +345,18 @@ class Execution:
             conn.execute("UPDATE attempts SET lease_expires_at=clock_timestamp()+(%s * interval '1 second') WHERE id=%s",
                          (self.settings.lease_seconds, claim["attempt_id"]))
 
+    def wait_for_operation(self, claim, operation_id):
+        """Park a stopped handler without making an uncertain call retryable."""
+        with connect(self.settings.database_url) as conn:
+            self._lease(conn, claim)
+            operation = conn.execute("SELECT state FROM operations WHERE id=%s AND run_id=%s AND task_id=%s",
+                                     (operation_id, claim["run_id"], claim["task_id"])).fetchone()
+            if not operation:
+                raise NotFound("Operation not found")
+            conn.execute("UPDATE attempts SET state='RECONCILIATION',error='operation_outcome_unknown' WHERE id=%s", (claim["attempt_id"],))
+            event(conn, claim["run_id"], "attempt.reconciliation", actor=claim["worker_id"], task_id=claim["task_id"],
+                  attempt_id=claim["attempt_id"], operation_id=str(operation_id))
+
     def complete(self, claim, output):
         # Publish bytes first. Failed commits may leave invisible orphan files.
         metadata = self.store.put(claim["run_id"], canonical(output))
@@ -343,6 +372,9 @@ class Execution:
         validate_message(result, "taskResult")
         with connect(self.settings.database_url) as conn:
             self._lease(conn, claim)
+            if conn.execute("SELECT 1 FROM operations WHERE run_id=%s AND task_id=%s AND state IN ('RESERVED','DISPATCHED','UNKNOWN') LIMIT 1",
+                            (claim["run_id"], claim["task_id"])).fetchone():
+                raise Conflict("Cannot complete a task with unsettled paid operations")
             conn.execute("""INSERT INTO artifacts(id,run_id,task_id,attempt_id,sha256,storage_key,media_type,size_bytes)
                 VALUES (%s,%s,%s,%s,%s,%s,'application/json',%s)""",
                 (artifact_id, claim["run_id"], claim["task_id"], claim["attempt_id"], metadata["sha256"], metadata["storage_key"], metadata["size_bytes"]))

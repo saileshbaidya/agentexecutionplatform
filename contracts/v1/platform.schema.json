@@ -5,7 +5,31 @@
   "$ref": "#/$defs/plan",
   "$defs": {
     "id": {"type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$"},
-    "money": {"type": "integer", "minimum": 0},
+    "money": {"type": "integer", "minimum": 0, "maximum": 9000000000000000},
+    "paidCall": {
+      "type": "object", "additionalProperties": false,
+      "required": ["call_key", "provider", "input", "max_input_tokens", "max_output_tokens", "output_tokens", "max_cost_micro_usd"],
+      "properties": {
+        "call_key": {"$ref": "#/$defs/id"},
+        "provider": {"const": "fake-v1"},
+        "input": {"type": "string", "maxLength": 100000},
+        "max_input_tokens": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "max_output_tokens": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "output_tokens": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "max_cost_micro_usd": {"$ref": "#/$defs/money"},
+        "mode": {"enum": ["success", "known_failure", "timeout_after_accept", "timeout_before_accept"]},
+        "reconcile_delay_seconds": {"type": "integer", "minimum": 0, "maximum": 3600}
+      }
+    },
+    "adjustment": {
+      "type": "object", "additionalProperties": false,
+      "required": ["adjustment_key", "delta_micro_usd", "reason"],
+      "properties": {
+        "adjustment_key": {"$ref": "#/$defs/id"},
+        "delta_micro_usd": {"type": "integer", "minimum": -9000000000000000, "maximum": 9000000000000000},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 500}
+      }
+    },
     "artifactRef": {
       "type": "object", "additionalProperties": false,
       "required": ["artifact_id", "sha256"],
@@ -50,6 +74,7 @@
         "capabilities": {"type": "array", "uniqueItems": true, "maxItems": 100, "items": {"$ref": "#/$defs/id"}},
         "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
         "context_token_limit": {"type": "integer", "minimum": 1, "maximum": 1000000},
+        "paid_call": {"$ref": "#/$defs/paidCall"},
         "retry": {"$ref": "#/$defs/retry"}
       }
     },

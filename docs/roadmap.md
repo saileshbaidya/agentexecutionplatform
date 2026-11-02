@@ -6,7 +6,7 @@
    attempt leases, crash recovery, artifacts, events, and integration tests.
 2. **DAG execution (implemented):** concurrent workers, dependency scheduling, retry backoff,
    deadlines, cancellation, fail-fast draining, and race tests.
-3. **Budget control:** operation admission, atomic reservations, ledger,
+3. **Budget control (implemented):** operation admission, atomic reservations, ledger,
    reconciliation, bounded provider adapter contract, and concurrency tests.
 4. **Agent integration:** bounded planner, agent registry, model adapter,
    evidence contracts, review and report generation, recorded fixtures.

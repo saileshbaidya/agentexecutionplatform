@@ -2,9 +2,9 @@
 
 All transitions are durable compare-and-set operations with an event appended in
 the same transaction. Terminal states are immutable through the execution API.
-Milestones 1–2 implement leases, retries, dependency admission, deadlines,
-fail-fast draining, and explicit user cancellation. Approvals and operation
-reconciliation remain later milestones; their states below are design contracts.
+Milestones 1–3 implement leases, retries, dependency admission, deadlines,
+fail-fast draining, explicit user cancellation, and operation reconciliation through
+a fake provider. Approvals and real model/tool adapters remain later milestones.
 
 ## Run
 
@@ -49,7 +49,8 @@ the operation's accounting remains open.
 ## Attempt and operation
 
 Attempts: ACTIVE -> SUCCEEDED | FAILED | EXPIRED | CANCELLED | RECONCILIATION.
-RECONCILIATION -> SUCCEEDED | FAILED | CANCELLED. A safe retry creates a new attempt.
+RECONCILIATION -> FAILED | CANCELLED. A resolved operation resumes task computation
+through a new attempt, consuming retry allowance and using the cached operation.
 Worker heartbeats extend only the current ACTIVE lease. Every new claim increments
 the task fencing token. Completion checks token, owner, expiry, and run state.
 
@@ -57,6 +58,12 @@ Operations: RESERVED -> DISPATCHED -> SUCCEEDED | FAILED | UNKNOWN.
 UNKNOWN -> SUCCEEDED | FAILED after reconciliation. Reservations are SETTLED after
 known usage, or RELEASED only when no charge is established. UNKNOWN retains funds.
 Approval denial prevents dispatch and releases any unused reservation.
+
+Current runtime operation cancellation only releases RESERVED calls that cannot
+have been dispatched. Their operation becomes CANCELLED. Known zero-charge
+NOT_ACCEPTED evidence closes a dispatched call as FAILED and releases its hold.
+Unknown liabilities remain held even after execution becomes terminal. Settlement
+and immutable accounting corrections do not reopen terminal execution state.
 
 Retries use capped exponential backoff with jitter and a persisted next-run time.
 Validation, policy denial, and permanent provider errors are not transient retries.

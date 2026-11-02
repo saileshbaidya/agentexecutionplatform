@@ -2,9 +2,9 @@
 
 A platform that separates agent reasoning from durable, policy-controlled execution.
 
-Milestones 0–2 provide the design contracts and a PostgreSQL-backed execution
+Milestones 0–3 provide the design contracts and a PostgreSQL-backed execution
 core with an API, concurrent deterministic workers, DAG scheduling, cancellation,
-leases, retries, and crash recovery.
+leases, retries, crash recovery, and shared budget enforcement with a fake provider.
 Model calls, external tools, and Azure deployment are later milestones.
 
 ## Run the platform
@@ -18,6 +18,9 @@ See the [milestone 1 guide](docs/milestone-1.md) for task submission, report ret
 local Python setup, integration tests, and a worker-kill recovery demonstration.
 See the [milestone 2 guide](docs/milestone-2.md) for custom DAGs, parallel workers,
 concurrency limits, scheduler behavior, timeouts, and cancellation.
+See the [milestone 3 guide](docs/milestone-3.md) for atomic reservations, paid-call
+limits, usage accounting, and uncertain-charge reconciliation. Its provider is
+entirely synthetic; real model calls remain a later milestone.
 
 ## Design
 

@@ -61,9 +61,9 @@ validation and admission path. Model planning and gateway accounting are deferre
 
 ## Persistent records
 
-Milestone 1 implements Run, Task, Dependency, Attempt, Artifact, and Event records.
-Operation, Budget reservation, Usage ledger, and Approval records below describe
-the later accounting and tool-gateway milestones; they are not in the current schema.
+Milestones 1–3 implement Run, Task, Dependency, Attempt, Artifact, Event, Operation,
+Budget account/reservation, and Usage ledger records. Approval remains part of the
+later tool-gateway milestone. Milestone 3 uses a durable bounded fake provider.
 
 | Record | Purpose and important constraints |
 | --- | --- |
