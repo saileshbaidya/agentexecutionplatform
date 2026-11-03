@@ -2,9 +2,10 @@
 
 All transitions are durable compare-and-set operations with an event appended in
 the same transaction. Terminal states are immutable through the execution API.
-Milestones 1–3 implement leases, retries, dependency admission, deadlines,
+Milestones 1–4 implement leases, retries, dependency admission, deadlines,
 fail-fast draining, explicit user cancellation, and operation reconciliation through
-a fake provider. Approvals and real model/tool adapters remain later milestones.
+fake/recorded providers and an opt-in OpenAI adapter. Approvals and external
+tool adapters remain later milestones.
 
 ## Run
 

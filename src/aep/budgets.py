@@ -12,7 +12,7 @@ from psycopg.types.json import Jsonb
 from .contracts import validate_message
 from .db import connect
 from .execution import Conflict, LeaseLost, NotFound, canonical, event
-from .providers import FakeProvider, OutcomeUnknown, quote_call
+from .providers import FakeProvider, OutcomeUnknown, quote_call, usage_cost
 
 
 class BudgetDenied(Exception):
@@ -51,6 +51,10 @@ class Budgets:
 
     def reserve(self, claim, spec):
         request, quote = quote_call(spec)
+        return self._reserve_prepared(claim, request, quote)
+
+    def _reserve_prepared(self, claim, request, quote):
+        """Trusted adapter entry point. Agent/model text cannot supply a quote."""
         digest = hashlib.sha256(canonical({"request": request, "quote": quote})).hexdigest()
         with connect(self.dsn) as conn:
             self.engine._lease(conn, claim)
@@ -91,6 +95,9 @@ class Budgets:
                 raise NotFound("Operation not found")
             if operation["state"] != "RESERVED":
                 raise Conflict("Operation has already been dispatched or closed")
+            if operation["request"]["provider"] == "openai-responses-v1" and not self.engine.settings.enable_openai:
+                from .model_provider import ModelCallError
+                raise ModelCallError("openai_backend_disabled")
             account = account_snapshot(conn, claim["run_id"])
             if account["breached"]:
                 raise BudgetDenied(operation["quote"]["bound_micro_usd"], account["available_micro_usd"], True)
@@ -103,6 +110,15 @@ class Budgets:
 
     def call(self, claim, spec):
         operation = self.reserve(claim, spec)
+        return self.execute_reserved(claim, operation)
+
+    def _provider_for(self, operation):
+        if operation["request"]["provider"] == "fake-v1":
+            return self.provider
+        from .model_provider import ModelProvider
+        return ModelProvider(self.engine)
+
+    def execute_reserved(self, claim, operation):
         if operation["state"] == "SUCCEEDED":
             return self._call_result(operation)
         if operation["state"] in {"FAILED", "CANCELLED"}:
@@ -111,7 +127,7 @@ class Budgets:
             raise OperationPending(operation["id"])
         token = self.dispatch(claim, operation["id"])
         try:
-            receipt = self.provider.execute(operation["id"], token, claim)
+            receipt = self._provider_for(operation).execute(operation["id"], token, claim)
         except OutcomeUnknown:
             self.mark_unknown(operation["id"])
             raise OperationPending(operation["id"]) from None
@@ -125,7 +141,7 @@ class Budgets:
 
     @staticmethod
     def _call_result(operation):
-        return {"operation_id": str(operation["id"]), "provider": "fake-v1",
+        return {"operation_id": str(operation["id"]), "provider": operation["quote"]["provider"],
                 "price_version": operation["quote"]["price_version"], **operation["result"]}
 
     def _lock_operation(self, conn, operation_id, run_id=None, owner=None):
@@ -149,9 +165,8 @@ class Budgets:
         """Internal trusted-adapter entry point; verify durable provider evidence."""
         with connect(self.dsn) as conn:
             run, operation = self._lock_operation(conn, operation_id)
-            evidence = conn.execute("""SELECT receipt FROM fake_provider_receipts WHERE operation_id=%s
-                AND available_at<=clock_timestamp()""", (operation_id,)).fetchone()
-            if not evidence or evidence["receipt"] != receipt:
+            evidence = self._provider_for(operation).evidence(conn, operation)
+            if evidence != receipt:
                 raise Conflict("Settlement requires matching authoritative provider evidence")
             return self._settle_locked(conn, run, operation, receipt)
 
@@ -169,7 +184,10 @@ class Budgets:
                 raise ValueError("Provider usage must be nonnegative integers")
         quote = operation["quote"]
         actual = receipt["cost_micro_usd"]
-        expected = receipt["input_tokens"] * quote["input_rate_micro_usd"] + receipt["output_tokens"] * quote["output_rate_micro_usd"]
+        cached = receipt.get("cached_input_tokens", 0)
+        if type(cached) is not int or not 0 <= cached <= receipt["input_tokens"]:
+            raise ValueError("Invalid cached input usage")
+        expected = usage_cost(quote, receipt["input_tokens"], receipt["output_tokens"], cached)
         if actual != expected or (receipt["outcome"] == "NOT_ACCEPTED" and actual):
             raise ValueError("Inconsistent provider usage")
         breached = (actual > quote["bound_micro_usd"] or receipt["input_tokens"] > quote["max_input_tokens"]
@@ -201,6 +219,14 @@ class Budgets:
         return result
 
     def reconcile_operation(self, operation_id, run_id=None, owner=None):
+        # External lookup must never run inside a transaction holding a run lock.
+        with connect(self.dsn) as conn:
+            snapshot = conn.execute("SELECT o.*,r.owner_id FROM operations o JOIN runs r ON r.id=o.run_id WHERE o.id=%s", (operation_id,)).fetchone()
+            if (not snapshot or (run_id is not None and str(snapshot["run_id"]) != str(run_id))
+                    or (owner is not None and snapshot["owner_id"] != owner)):
+                raise NotFound("Operation not found")
+        if snapshot["request"]["provider"] != "fake-v1" and snapshot["state"] in {"DISPATCHED", "UNKNOWN"}:
+            self._provider_for(snapshot).refresh(snapshot)
         with connect(self.dsn) as conn:
             run, operation = self._lock_operation(conn, operation_id, run_id, owner)
             conn.execute("UPDATE operations SET last_checked_at=clock_timestamp() WHERE id=%s", (operation_id,))
@@ -212,7 +238,7 @@ class Budgets:
                 return operation
             if operation["state"] not in {"DISPATCHED", "UNKNOWN"}:
                 return operation
-            receipt = self.provider.evidence(conn, operation)
+            receipt = self._provider_for(operation).evidence(conn, operation)
             if receipt is not None:
                 return self._settle_locked(conn, run, operation, receipt)
             # A live dispatcher may be between its commit and provider acceptance.

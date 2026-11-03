@@ -1,0 +1,18 @@
+{
+  "fixture_version": "synthetic-agent-demo-v1",
+  "request": "Compare the reported capacity in the supplied documents.",
+  "documents": [
+    {"document_id": "north-audit", "title": "North audit", "text": "The 2025 audit reports a capacity of 10 units."},
+    {"document_id": "south-audit", "title": "South audit", "text": "The 2025 audit reports a capacity of 12 units."}
+  ],
+  "responses": {
+    "planner": {"branches": [
+      {"task_id": "research-1", "objective": "Extract the capacity reported in the north audit.", "document_ids": ["north-audit"]},
+      {"task_id": "research-2", "objective": "Extract the capacity reported in the south audit.", "document_ids": ["south-audit"]}
+    ], "synthesis_goal": "Explain the conflicting capacity figures without choosing an unsupported winner."},
+    "research-1": {"findings": [{"statement": "The north audit reports a capacity of 10 units.", "source_document_id": "north-audit", "quote": "The 2025 audit reports a capacity of 10 units."}], "limitations": ["The audit's measurement method is not supplied."]},
+    "research-2": {"findings": [{"statement": "The south audit reports a capacity of 12 units.", "source_document_id": "south-audit", "quote": "The 2025 audit reports a capacity of 12 units."}], "limitations": ["The audit's measurement method is not supplied."]},
+    "review": {"review": {"unsupported_claim_ids": [], "conflicts": [{"claim_ids": ["$CLAIM_1", "$CLAIM_2"], "status": "unresolved", "explanation": "The supplied 2025 audits report 10 and 12 units. The documents do not establish which figure applies."}]}},
+    "writer": {"title": "Capacity evidence review", "summary": "The supplied audits report different capacity figures; the discrepancy remains unresolved.", "sections": [{"heading": "Findings", "text": "The north audit reports 10 units and the south audit reports 12 units. Neither source establishes a basis for preferring one figure.", "claim_ids": ["$CLAIM_1", "$CLAIM_2"]}], "acknowledged_conflict_indices": [0]}
+  }
+}

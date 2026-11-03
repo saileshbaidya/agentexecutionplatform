@@ -14,6 +14,8 @@ from .config import Settings
 from .db import connect
 from .execution import Conflict, Execution, NotFound
 from .budgets import Budgets
+from .registry import AGENTS
+from .model_provider import ModelProvider
 
 
 MAX_SUBMISSION_BYTES = 256 * 1024
@@ -48,9 +50,14 @@ def create_app(settings=None):
     @app.get("/health/ready")
     def ready():
         with connect(settings.database_url) as conn:
-            if not conn.execute("SELECT 1 FROM schema_migrations WHERE name='003_shared_budgets.sql'").fetchone():
+            if not conn.execute("SELECT 1 FROM schema_migrations WHERE name='004_agent_integration.sql'").fetchone():
                 raise HTTPException(status_code=503, detail="Migrations not applied")
         return {"status": "ready"}
+
+    @app.get("/agents", dependencies=[Depends(authenticated)])
+    def registry():
+        return {"agents": [{"id": agent_id, **definition} for agent_id, definition in AGENTS.items()],
+                "backends": {"recorded": True, "openai": settings.enable_openai}}
 
     async def read_json(request):
         body = bytearray()
@@ -115,6 +122,18 @@ def create_app(settings=None):
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return jsonable_encoder(entry)
+
+    @app.post("/runs/{run_id}/operations/{operation_id}/response", dependencies=[Depends(authenticated)])
+    async def attach_response(run_id: UUID, operation_id: UUID, request: Request):
+        body = await read_json(request)
+        if not isinstance(body, dict) or set(body) != {"response_id"}:
+            raise HTTPException(status_code=422, detail="Expected only response_id")
+        try:
+            await run_in_threadpool(ModelProvider(engine).attach_response, run_id, operation_id, body["response_id"])
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        operation = await run_in_threadpool(budgets.reconcile_operation, operation_id, run_id, "local")
+        return jsonable_encoder(operation)
 
     @app.get("/runs/{run_id}/artifacts/{artifact_id}", dependencies=[Depends(authenticated)])
     def artifact(run_id: UUID, artifact_id: UUID):

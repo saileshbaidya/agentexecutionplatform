@@ -1,0 +1,13 @@
+{
+  "schema_version": "1",
+  "idempotency_key": "agent-demo-001",
+  "request": "Compare the reported capacity in the supplied documents.",
+  "budget_micro_usd": 1000000,
+  "timeout_seconds": 900,
+  "max_concurrency": 2,
+  "agent": {"backend": "recorded", "research_branches": 2, "max_input_tokens": 16000, "max_output_tokens": 2048, "max_call_cost_micro_usd": 100000},
+  "documents": [
+    {"document_id": "north-audit", "title": "North audit", "text": "The 2025 audit reports a capacity of 10 units."},
+    {"document_id": "south-audit", "title": "South audit", "text": "The 2025 audit reports a capacity of 12 units."}
+  ]
+}

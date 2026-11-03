@@ -1,5 +1,9 @@
 # Milestone 3: shared budgets and paid-operation recovery
 
+[Milestone 4](milestone-4.md) extends this accounting foundation to versioned agents
+and an opt-in OpenAI Responses adapter. The fake-provider example below remains
+available and retains its original behavior.
+
 The platform now enforces one shared USD budget per run. All enabled paid calls
 pass through `Budgets.call()` in `src/aep/budgets.py`. Milestone 3 uses a durable
 fake provider: its charges are synthetic accounting values, with no real LLM,

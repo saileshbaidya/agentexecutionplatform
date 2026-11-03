@@ -18,6 +18,8 @@ def main():
     worker.add_argument("--worker-id", default=None)
     scheduler = commands.add_parser("scheduler", help="Plan runs, admit dependencies, and recover expired work")
     scheduler.add_argument("--once", action="store_true", help="Perform one maintenance pass")
+    reconciler = commands.add_parser("reconciler", help="Poll provider evidence and settle accounting independently of scheduling")
+    reconciler.add_argument("--once", action="store_true", help="Reconcile one bounded batch")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     settings = Settings.from_env()
@@ -36,6 +38,9 @@ def main():
         if args.command == "scheduler":
             from .scheduler import run_scheduler
             run_scheduler(settings, stop=stop, once=args.once)
+        elif args.command == "reconciler":
+            from .reconciler import run_reconciler
+            run_reconciler(settings, stop=stop, once=args.once)
         else:
             from .worker import run_worker
             run_worker(settings, stop=stop, once=args.once, worker_id=args.worker_id)

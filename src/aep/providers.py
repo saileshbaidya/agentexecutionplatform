@@ -14,6 +14,14 @@ class OutcomeUnknown(Exception):
     pass
 
 
+def usage_cost(quote, input_tokens, output_tokens, cached_tokens=0):
+    denominator = quote.get("rate_denominator", 1)
+    numerator = ((input_tokens - cached_tokens) * quote["input_rate_micro_usd"]
+                 + cached_tokens * quote.get("cached_input_rate_micro_usd", quote["input_rate_micro_usd"])
+                 + output_tokens * quote["output_rate_micro_usd"])
+    return (numerator + denominator - 1) // denominator
+
+
 def quote_call(spec):
     validate_message(spec, "paidCall")
     request = dict(spec, mode=spec.get("mode", "success"),

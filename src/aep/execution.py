@@ -15,7 +15,7 @@ from psycopg.types.json import Jsonb
 from .artifacts import LocalArtifacts
 from .contracts import validate_message
 from .db import connect
-from .planner import make_plan, validate_executable_plan
+from .planner import make_plan, make_agent_plan, validate_executable_plan
 
 
 class Conflict(Exception):
@@ -49,6 +49,12 @@ class Execution:
 
     def submit(self, submission, owner="local"):
         validate_message(submission, "submission")
+        profile = None
+        if "agent" in submission:
+            from .agents import build_profile
+            profile = build_profile(submission, self.settings)
+        elif "documents" in submission:
+            raise ValueError("Supplied documents require agent submission mode")
         # Artifact ingestion/authorization is not exposed yet. Do not silently ignore input.
         if submission.get("input_artifacts"):
             raise ValueError("Input artifacts are not supported by the deterministic planner")
@@ -61,15 +67,21 @@ class Execution:
         digest = hashlib.sha256(canonical(normalized)).hexdigest()
         with connect(self.settings.database_url) as conn:
             created = conn.execute("""INSERT INTO runs
-                (id,owner_id,idempotency_key,input_hash,submission,state,deadline_at,max_concurrency)
-                VALUES (%s,%s,%s,%s,%s,'SUBMITTED',clock_timestamp()+(%s * interval '1 second'),%s)
+                (id,owner_id,idempotency_key,input_hash,submission,state,deadline_at,max_concurrency,agent_profile)
+                VALUES (%s,%s,%s,%s,%s,'SUBMITTED',clock_timestamp()+(%s * interval '1 second'),%s,%s)
                 ON CONFLICT(owner_id,idempotency_key) DO NOTHING RETURNING id""",
-                (uuid4(), owner, submission["idempotency_key"], digest, Jsonb(normalized), submission["timeout_seconds"], concurrency)).fetchone()
+                (uuid4(), owner, submission["idempotency_key"], digest, Jsonb(normalized), submission["timeout_seconds"], concurrency,
+                 Jsonb(profile) if profile else None)).fetchone()
             run = conn.execute("SELECT * FROM runs WHERE owner_id=%s AND idempotency_key=%s FOR UPDATE",
                                (owner, submission["idempotency_key"])).fetchone()
             if run["input_hash"] != digest:
                 raise Conflict("Idempotency key already used with different input")
             if created:
+                for document in submission.get("documents", []):
+                    content = document["text"]
+                    conn.execute("""INSERT INTO source_documents(run_id,document_id,artifact_id,title,content,sha256)
+                        VALUES (%s,%s,%s,%s,%s,%s)""", (run["id"], document["document_id"], uuid4(), document["title"], content,
+                        hashlib.sha256(content.encode("utf-8")).hexdigest()))
                 conn.execute("INSERT INTO budget_accounts(run_id,limit_micro_usd) VALUES (%s,%s)",
                              (run["id"], submission["budget_micro_usd"]))
                 event(conn, run["id"], "run.submitted", actor=owner)
@@ -80,7 +92,7 @@ class Execution:
             conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
             run = conn.execute("""SELECT id,state,failure,final_artifact_id,created_at,updated_at,
                 deadline_at,event_sequence,plan,max_concurrency,cancel_requested_at,cancel_requested_by,
-                cancel_reason FROM runs WHERE id=%s AND owner_id=%s""", (run_id, owner)).fetchone()
+                cancel_reason,agent_profile FROM runs WHERE id=%s AND owner_id=%s""", (run_id, owner)).fetchone()
             if not run:
                 raise NotFound("Run not found")
             run["tasks"] = conn.execute("""SELECT id,state,attempt_count,fencing_token,first_started_at,next_run_at,result,
@@ -90,6 +102,7 @@ class Execution:
                 lease_expires_at,finished_at,error,input_snapshot FROM attempts WHERE run_id=%s ORDER BY started_at,id""", (run_id,)).fetchall()
             from .budgets import account_snapshot
             run["budget"] = account_snapshot(conn, run_id)
+            run["documents"] = conn.execute("SELECT document_id,title,artifact_id,sha256 FROM source_documents WHERE run_id=%s ORDER BY document_id", (run_id,)).fetchall()
             return run
 
     def cancel(self, run_id, owner="local"):
@@ -126,14 +139,22 @@ class Execution:
             metadata = conn.execute("""SELECT a.* FROM artifacts a JOIN runs r ON r.id=a.run_id
                 WHERE a.run_id=%s AND a.id=%s AND r.owner_id=%s""", (run_id, artifact_id, owner)).fetchone()
             if not metadata:
-                raise NotFound("Artifact not found")
+                source = conn.execute("""SELECT d.* FROM source_documents d JOIN runs r ON r.id=d.run_id
+                    WHERE d.run_id=%s AND d.artifact_id=%s AND r.owner_id=%s""", (run_id, artifact_id, owner)).fetchone()
+                if not source:
+                    raise NotFound("Artifact not found")
+                content = source["content"].encode("utf-8")
+                if hashlib.sha256(content).hexdigest() != source["sha256"]:
+                    raise ValueError("Source checksum mismatch")
+                return {"sha256": source["sha256"], "media_type": "text/plain", "size_bytes": len(content)}, content
         return metadata, self.store.read(metadata)
 
     def maintain(self):
         """Recover submitted runs and expired work. Safe for multiple schedulers."""
         from .budgets import Budgets
         # Accounting reconciliation also scans liabilities on terminal runs.
-        Budgets(self).reconcile_pending()
+        if self.settings.inline_reconciliation:
+            Budgets(self).reconcile_pending()
         with connect(self.settings.database_url) as conn:
             ids = conn.execute("SELECT id FROM runs WHERE state IN ('SUBMITTED','RUNNING','CANCELLING') ORDER BY created_at").fetchall()
         for row in ids:
@@ -151,10 +172,10 @@ class Execution:
         if run["deadline_at"] <= conn.execute("SELECT clock_timestamp() AS now").fetchone()["now"]:
             return
         conn.execute("UPDATE runs SET state='PLANNING' WHERE id=%s", (run["id"],))
-        event(conn, run["id"], "run.planning", planner="deterministic-v1")
+        event(conn, run["id"], "run.planning", planner="bounded-agent-template-v1" if run["agent_profile"] else "deterministic-v1")
         try:
-            plan = run["submission"].get("plan") or make_plan()
-            validate_executable_plan(plan)
+            plan = make_agent_plan(run["agent_profile"]) if run["agent_profile"] else run["submission"].get("plan") or make_plan()
+            validate_executable_plan(plan, allow_agents=bool(run["agent_profile"]))
         except Exception as exc:
             reason = "invalid_plan" if isinstance(exc, ValueError) else "planner_error"
             conn.execute("UPDATE runs SET state='FAILED',failure=%s WHERE id=%s", (reason, run["id"]))
@@ -292,6 +313,10 @@ class Execution:
                 SELECT t.id,t.result FROM tasks t JOIN ancestors a ON a.id=t.id WHERE t.run_id=%s ORDER BY t.id""",
                 (run["id"], task["id"], run["id"], run["id"])).fetchall()
             snapshot = {"spec": task["spec"], "inputs": {p["id"]: p["result"] for p in inputs}, "request": run["submission"]["request"]}
+            if "agent_profile" in task["spec"]:
+                documents = conn.execute("SELECT * FROM source_documents WHERE run_id=%s ORDER BY document_id", (run["id"],)).fetchall()
+                snapshot["documents"] = [{"document_id": d["document_id"], "title": d["title"], "text": d["content"],
+                                          "artifact": {"artifact_id": str(d["artifact_id"]), "sha256": d["sha256"]}} for d in documents]
             conn.execute("""INSERT INTO attempts(id,run_id,task_id,number,fencing_token,worker_id,state,lease_expires_at,input_snapshot)
                 VALUES (%s,%s,%s,%s,%s,%s,'ACTIVE',clock_timestamp()+(%s * interval '1 second'),%s)""",
                 (attempt_id, run["id"], task["id"], task["attempt_count"], task["fencing_token"], worker_id, self.settings.lease_seconds, Jsonb(snapshot)))
@@ -369,6 +394,8 @@ class Execution:
                 "sources": [{"artifact": result["artifacts"][0], "locator": "claims/" + fact["claim_id"]}]})
         if "review" in output:
             result["review"] = output["review"]
+        if "agent_output" in output:
+            result["agent_output"] = output["agent_output"]
         validate_message(result, "taskResult")
         with connect(self.settings.database_url) as conn:
             self._lease(conn, claim)

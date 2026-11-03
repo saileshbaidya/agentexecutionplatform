@@ -10,6 +10,9 @@ import psycopg
 from .execution import Execution, LeaseLost
 from .handlers import execute
 from .budgets import BudgetDenied, Budgets, OperationPending, ProviderFailure
+from .agents import AgentOutputError, execute_agent
+from .model_provider import ModelCallError
+from .registry import AGENTS
 
 
 log = logging.getLogger(__name__)
@@ -40,7 +43,8 @@ def run_claim(engine, claim, stop):
         paid_result = None
         if "paid_call" in claim["spec"]:
             paid_result = Budgets(engine).call(claim, claim["spec"]["paid_call"])
-        output = execute(claim)
+        output = (execute_agent(engine, claim, should_stop=lambda: lost.is_set() or stop.is_set())
+                  if claim["spec"]["handler"] in AGENTS else execute(claim))
         if paid_result is not None:
             output["paid_operation"] = paid_result
         if lost.is_set() or stop.is_set():
@@ -69,6 +73,12 @@ def run_claim(engine, claim, stop):
         # A commit can have an unknown outcome. Never record failure on a new
         # connection as if the old commit were known to have failed.
         log.warning("attempt.database_error run=%s attempt=%s", claim["run_id"], claim["attempt_id"])
+    except (AgentOutputError, ModelCallError) as invalid:
+        log.warning("attempt.agent_error run=%s reason=%s", claim["run_id"], str(invalid))
+        try:
+            engine.fail(claim, reason=str(invalid), retryable=False)
+        except (LeaseLost, psycopg.Error):
+            log.warning("attempt.failure_not_committed attempt=%s", claim["attempt_id"])
     except ValueError:
         log.warning("attempt.invalid_output run=%s attempt=%s", claim["run_id"], claim["attempt_id"])
         try:

@@ -38,7 +38,7 @@ class ExecutionTests(PostgresFixture, unittest.TestCase):
     def test_migrations_idempotent_and_checksummed(self):
         migrate(self.dsn)
         with connect(self.dsn) as conn:
-            self.assertEqual(conn.execute("SELECT count(*) AS n FROM schema_migrations").fetchone()["n"], 3)
+            self.assertEqual(conn.execute("SELECT count(*) AS n FROM schema_migrations").fetchone()["n"], 4)
             conn.execute("UPDATE schema_migrations SET sha256=%s", ("0" * 64,))
         with self.assertRaisesRegex(RuntimeError, "changed"):
             migrate(self.dsn)

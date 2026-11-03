@@ -16,7 +16,7 @@ dependencies = {file = ["requirements.txt"]}
 where = ["src"]
 
 [tool.setuptools.package-data]
-aep = ["migrations/*.sql"]
+aep = ["migrations/*.sql", "data/*.json"]
 
 [tool.setuptools.data-files]
 "share/aep/contracts" = ["contracts/v1/platform.schema.json"]

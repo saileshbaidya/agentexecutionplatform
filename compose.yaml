@@ -25,6 +25,15 @@ services:
       AEP_POLL_SECONDS: ${AEP_POLL_SECONDS:-1}
       AEP_FAKE_DELAY_SECONDS: ${AEP_FAKE_DELAY_SECONDS:-0}
       AEP_RUN_CONCURRENCY_LIMIT: ${AEP_RUN_CONCURRENCY_LIMIT:-4}
+      AEP_INLINE_RECONCILIATION: "false"
+      AEP_ENABLE_OPENAI: ${AEP_ENABLE_OPENAI:-false}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AEP_OPENAI_MODEL: ${AEP_OPENAI_MODEL:-}
+      AEP_MODEL_PRICE_VERSION: ${AEP_MODEL_PRICE_VERSION:-}
+      AEP_MODEL_INPUT_RATE: ${AEP_MODEL_INPUT_RATE:-0}
+      AEP_MODEL_CACHED_INPUT_RATE: ${AEP_MODEL_CACHED_INPUT_RATE:-}
+      AEP_MODEL_OUTPUT_RATE: ${AEP_MODEL_OUTPUT_RATE:-0}
+      AEP_MODEL_HTTP_TIMEOUT: ${AEP_MODEL_HTTP_TIMEOUT:-30}
     depends_on:
       postgres:
         condition: service_healthy
@@ -51,10 +60,20 @@ services:
         condition: service_completed_successfully
       scheduler:
         condition: service_started
+      reconciler:
+        condition: service_started
     restart: unless-stopped
   scheduler:
     build: .
     command: ["python", "-m", "aep", "scheduler"]
+    environment: *runtime
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+  reconciler:
+    build: .
+    command: ["python", "-m", "aep", "reconciler"]
     environment: *runtime
     depends_on:
       migrate:

@@ -2,10 +2,11 @@
 
 A platform that separates agent reasoning from durable, policy-controlled execution.
 
-Milestones 0–3 provide the design contracts and a PostgreSQL-backed execution
+Milestones 0–4 provide the design contracts and a PostgreSQL-backed execution
 core with an API, concurrent deterministic workers, DAG scheduling, cancellation,
-leases, retries, crash recovery, and shared budget enforcement with a fake provider.
-Model calls, external tools, and Azure deployment are later milestones.
+leases, retries, crash recovery, shared budget enforcement, and versioned agents.
+Agent runs support a recorded demonstration and opt-in OpenAI model calls over
+supplied documents. Secure external tools and Azure deployment are later milestones.
 
 ## Run the platform
 
@@ -19,8 +20,14 @@ local Python setup, integration tests, and a worker-kill recovery demonstration.
 See the [milestone 2 guide](docs/milestone-2.md) for custom DAGs, parallel workers,
 concurrency limits, scheduler behavior, timeouts, and cancellation.
 See the [milestone 3 guide](docs/milestone-3.md) for atomic reservations, paid-call
-limits, usage accounting, and uncertain-charge reconciliation. Its provider is
-entirely synthetic; real model calls remain a later milestone.
+limits, usage accounting, and uncertain-charge reconciliation.
+See the [milestone 4 guide](docs/milestone-4.md) for model configuration, source-backed
+research, evidence review, report writing, and recovery. Try it without credentials:
+
+```powershell
+$env:AEP_API_KEY = 'local-development-only'
+.\.venv\Scripts\python.exe scripts/agent_smoke.py
+```
 
 ## Design
 
@@ -57,5 +64,6 @@ src/aep/           API, execution core, workers, storage, migrations, and contra
 tests/             Contract, storage, API, PostgreSQL, and crash-recovery checks
 ```
 
-The planner and handlers are deterministic fixtures. Gateway and real agent
-orchestration modules will be added in later milestones.
+Default fake workflows remain available. Agent mode uses a bounded role pipeline
+and a shared model-call gateway. Compose runs provider reconciliation independently
+from scheduling so network polling cannot block execution deadlines.

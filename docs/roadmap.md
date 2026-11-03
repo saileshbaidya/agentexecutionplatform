@@ -8,7 +8,7 @@
    deadlines, cancellation, fail-fast draining, and race tests.
 3. **Budget control (implemented):** operation admission, atomic reservations, ledger,
    reconciliation, bounded provider adapter contract, and concurrency tests.
-4. **Agent integration:** bounded planner, agent registry, model adapter,
+4. **Agent integration (implemented):** bounded planner, agent registry, model adapter,
    evidence contracts, review and report generation, recorded fixtures.
 5. **Secure tools:** gateway, capability enforcement, scoped approvals, isolated
    execution backend, and negative security tests.

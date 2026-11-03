@@ -29,6 +29,9 @@ flowchart TD
 One Python repository with separately runnable API, scheduler, and worker
 processes. PostgreSQL is the authoritative execution store and initial work queue.
 Local artifact storage uses an interface later backed by Azure Blob Storage.
+Supplied source documents are immutable run inputs stored in PostgreSQL and
+exposed through the owned artifact API. A separate reconciler polls model
+providers outside scheduler transactions and keeps accounting alive after cancellation.
 FastAPI, Docker Compose, and OpenTelemetry will be introduced with runtime code.
 No Redis, broker, Kubernetes, or vector database is required for the initial scope.
 
@@ -55,15 +58,19 @@ Version 1 accepts a single immutable plan revision per run. Replanning requires 
 new run; plan revision migration and dynamic graph expansion are deferred.
 The planner itself is represented by the run's PLANNING phase, with recorded
 operations subject to the same gateway and accounting rules as task operations.
-The current fixed planner has no external operations: its PLANNING phase and graph
+The admission planner has no external operations: its PLANNING phase and graph
 admission share a single transaction. Optional submitted plans use the same
-validation and admission path. Model planning and gateway accounting are deferred.
+validation and admission path. Agent mode admits a bounded template DAG whose
+leased planner task uses a model to assign source coverage and research objectives.
+Model generations use durable shared-budget operations; arbitrary DAG revision
+and external tool execution remain deferred.
 
 ## Persistent records
 
 Milestones 1–3 implement Run, Task, Dependency, Attempt, Artifact, Event, Operation,
-Budget account/reservation, and Usage ledger records. Approval remains part of the
-later tool-gateway milestone. Milestone 3 uses a durable bounded fake provider.
+Budget account/reservation, and Usage ledger records. Milestone 4 adds owned source
+documents, frozen agent profiles, and durable model receipts/response IDs. Approval
+remains part of the later tool-gateway milestone.
 
 | Record | Purpose and important constraints |
 | --- | --- |

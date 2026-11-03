@@ -6,6 +6,26 @@
   "$defs": {
     "id": {"type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$"},
     "money": {"type": "integer", "minimum": 0, "maximum": 9000000000000000},
+    "agentConfig": {
+      "type": "object", "additionalProperties": false,
+      "required": ["backend"],
+      "properties": {
+        "backend": {"enum": ["recorded", "openai"]},
+        "research_branches": {"type": "integer", "minimum": 1, "maximum": 4},
+        "max_input_tokens": {"type": "integer", "minimum": 1024, "maximum": 64000},
+        "max_output_tokens": {"type": "integer", "minimum": 512, "maximum": 8192},
+        "max_call_cost_micro_usd": {"$ref": "#/$defs/money"}
+      }
+    },
+    "document": {
+      "type": "object", "additionalProperties": false,
+      "required": ["document_id", "title", "text"],
+      "properties": {
+        "document_id": {"$ref": "#/$defs/id"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 300},
+        "text": {"type": "string", "minLength": 1, "maxLength": 20000}
+      }
+    },
     "paidCall": {
       "type": "object", "additionalProperties": false,
       "required": ["call_key", "provider", "input", "max_input_tokens", "max_output_tokens", "output_tokens", "max_cost_micro_usd"],
@@ -48,6 +68,8 @@
         "budget_micro_usd": {"$ref": "#/$defs/money"},
         "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
         "max_concurrency": {"type": "integer", "minimum": 1, "maximum": 32},
+        "agent": {"$ref": "#/$defs/agentConfig"},
+        "documents": {"type": "array", "minItems": 1, "maxItems": 20, "items": {"$ref": "#/$defs/document"}},
         "plan": {"$ref": "#/$defs/plan"},
         "input_artifacts": {"type": "array", "items": {"$ref": "#/$defs/artifactRef"}, "maxItems": 100}
       }
@@ -75,6 +97,7 @@
         "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
         "context_token_limit": {"type": "integer", "minimum": 1, "maximum": 1000000},
         "paid_call": {"$ref": "#/$defs/paidCall"},
+        "agent_profile": {"type": "object"},
         "retry": {"$ref": "#/$defs/retry"}
       }
     },
@@ -97,7 +120,7 @@
         "sources": {"type": "array", "minItems": 1, "items": {
           "type": "object", "additionalProperties": false,
           "required": ["artifact", "locator"],
-          "properties": {"artifact": {"$ref": "#/$defs/artifactRef"}, "locator": {"type": "string", "minLength": 1}}
+          "properties": {"artifact": {"$ref": "#/$defs/artifactRef"}, "locator": {"type": "string", "minLength": 1}, "quote": {"type": "string", "minLength": 1}}
         }}
       }
     },
@@ -126,7 +149,8 @@
         "attempt_id": {"$ref": "#/$defs/id"},
         "artifacts": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/artifactRef"}},
         "findings": {"type": "array", "items": {"$ref": "#/$defs/finding"}},
-        "review": {"$ref": "#/$defs/review"}
+        "review": {"$ref": "#/$defs/review"},
+        "agent_output": {"type": "object"}
       }
     }
   }
