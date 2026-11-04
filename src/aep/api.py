@@ -16,6 +16,7 @@ from .execution import Conflict, Execution, NotFound
 from .budgets import Budgets
 from .registry import AGENTS
 from .model_provider import ModelProvider
+from .tools import ToolGateway
 
 
 MAX_SUBMISSION_BYTES = 256 * 1024
@@ -25,11 +26,16 @@ def create_app(settings=None):
     settings = settings or Settings.from_env()
     engine = Execution(settings)
     budgets = Budgets(engine)
+    tools = ToolGateway(engine)
     app = FastAPI(title="Agent Execution Platform", version="0.1.0")
 
     def authenticated(x_api_key: str = Header(default="")):
         if not secrets.compare_digest(x_api_key.encode(), settings.api_key.encode()):
             raise HTTPException(status_code=401, detail="Invalid API key")
+
+    def approver(x_approval_key: str = Header(default="")):
+        if not settings.tool_approval_key or not secrets.compare_digest(x_approval_key.encode(), settings.tool_approval_key.encode()):
+            raise HTTPException(status_code=403, detail="Separate human approval credential required")
 
     @app.exception_handler(NotFound)
     async def not_found(request, exc):
@@ -50,7 +56,7 @@ def create_app(settings=None):
     @app.get("/health/ready")
     def ready():
         with connect(settings.database_url) as conn:
-            if not conn.execute("SELECT 1 FROM schema_migrations WHERE name='004_agent_integration.sql'").fetchone():
+            if not conn.execute("SELECT 1 FROM schema_migrations WHERE name='005_secure_tools.sql'").fetchone():
                 raise HTTPException(status_code=503, detail="Migrations not applied")
         return {"status": "ready"}
 
@@ -69,6 +75,26 @@ def create_app(settings=None):
             return json.loads(body)
         except (ValueError, UnicodeError) as exc:
             raise HTTPException(status_code=422, detail="Invalid JSON body") from exc
+
+    @app.get("/tools", dependencies=[Depends(authenticated)])
+    def tool_registry():
+        from .tool_policy import TOOLS, LIMITS, POLICY_VERSION
+        return {"policy_version": POLICY_VERSION, "limits": LIMITS,
+                "tools": [{"name": name, **policy, "enabled": name in settings.tool_capabilities}
+                          for name, policy in TOOLS.items()]}
+
+    @app.get("/runs/{run_id}/tool-actions", dependencies=[Depends(authenticated)])
+    def tool_actions(run_id: UUID, after: int = Query(default=0, ge=0), limit: int = Query(default=100, ge=1, le=1000)):
+        rows = tools.history(run_id, after=after, limit=limit)
+        return jsonable_encoder({"actions": rows, "next_after": rows[-1]["sequence"] if rows else after})
+
+    @app.post("/runs/{run_id}/tool-actions/{action_id}/approval", dependencies=[Depends(authenticated), Depends(approver)])
+    async def approve_tool(run_id: UUID, action_id: UUID, request: Request):
+        body = await read_json(request)
+        try:
+            return jsonable_encoder(await run_in_threadpool(tools.decide, run_id, action_id, body))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.post("/runs", dependencies=[Depends(authenticated)])
     async def submit(request: Request):

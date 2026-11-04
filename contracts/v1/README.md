@@ -50,3 +50,12 @@ express. Both schema and semantic validation are mandatory at admission.
 
 Runtime API responses, events, approval messages, and database models will be
 specified with their implementing milestones. They are not frozen by this schema.
+
+Milestone 5 adds optional `task.tool_call` (call key, registered tool name, and
+strict tool-specific arguments), valid only on `tool-v1` utility tasks. Both the
+stored task capability and deployment policy must permit the action. Completed
+task results may include `tool_output` with the durable action ID, digest, and
+bounded sandbox result. TOOL_WAIT continuations create a new attempt without
+treating an approval wait as a failed retry. Human approval is a separate API
+decision over the server-generated canonical action; submissions cannot embed or
+grant approvals. See [the milestone 5 guide](../../docs/milestone-5.md).

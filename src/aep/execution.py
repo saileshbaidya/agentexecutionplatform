@@ -217,6 +217,29 @@ class Execution:
         tasks = conn.execute("SELECT * FROM tasks WHERE run_id=%s ORDER BY id", (run_id,)).fetchall()
         for task in tasks:
             timed_out = task["first_started_at"] is not None and now >= task["first_started_at"] + timedelta(seconds=task["spec"]["timeout_seconds"])
+            if task["state"] == "TOOL_WAIT":
+                action = conn.execute("SELECT * FROM tool_actions WHERE run_id=%s AND task_id=%s ORDER BY sequence DESC LIMIT 1",
+                                      (run_id, task["id"])).fetchone()
+                draining = run["state"] == "CANCELLING" or run["failure"]
+                if draining or timed_out:
+                    conn.execute("""UPDATE tool_actions SET state='CANCELLED',finished_at=%s WHERE run_id=%s AND task_id=%s
+                        AND state IN ('PENDING','READY')""", (now, run_id, task["id"]))
+                    if draining:
+                        conn.execute("UPDATE tasks SET state='CANCELLED' WHERE run_id=%s AND id=%s", (run_id, task["id"]))
+                        event(conn, run_id, "task.cancelled", task_id=task["id"])
+                    else:
+                        conn.execute("UPDATE tasks SET state='FAILED' WHERE run_id=%s AND id=%s", (run_id, task["id"]))
+                        conn.execute("UPDATE runs SET failure=COALESCE(failure,'task_timeout') WHERE id=%s", (run_id,))
+                        event(conn, run_id, "task.failed", task_id=task["id"], reason="task_timeout")
+                    continue
+                if action["state"] in {"PENDING", "READY"} and action["expires_at"] <= now:
+                    conn.execute("UPDATE tool_actions SET state='EXPIRED',finished_at=%s WHERE id=%s", (now, action["id"]))
+                    action["state"] = "EXPIRED"
+                    event(conn, run_id, "tool.expired", task_id=task["id"], action_id=str(action["id"]))
+                if action["state"] not in {"PENDING", "READY", "RUNNING"}:
+                    conn.execute("UPDATE tasks SET state='READY' WHERE run_id=%s AND id=%s", (run_id, task["id"]))
+                    event(conn, run_id, "task.ready", task_id=task["id"])
+                continue
             if task["state"] in {"READY", "RETRY_WAIT"} and timed_out and run["state"] != "CANCELLING" and not run["failure"]:
                 self._retry_or_fail(conn, run_id, task, "task_timeout", now)
             if task["state"] != "RUNNING":
@@ -248,9 +271,11 @@ class Execution:
         run = conn.execute("SELECT * FROM runs WHERE id=%s", (run_id,)).fetchone()
         if run["failure"] or run["state"] == "CANCELLING":
             cancelled = conn.execute("""UPDATE tasks SET state='CANCELLED' WHERE run_id=%s
-                AND state IN ('BLOCKED','READY','RETRY_WAIT') RETURNING id""", (run_id,)).fetchall()
+                AND state IN ('BLOCKED','READY','RETRY_WAIT','TOOL_WAIT') RETURNING id""", (run_id,)).fetchall()
             for task in cancelled:
                 event(conn, run_id, "task.cancelled", task_id=task["id"])
+            conn.execute("""UPDATE tool_actions SET state='CANCELLED',finished_at=clock_timestamp()
+                WHERE run_id=%s AND state IN ('PENDING','READY')""", (run_id,))
             active = conn.execute("SELECT 1 FROM attempts WHERE run_id=%s AND state IN ('ACTIVE','RECONCILIATION') LIMIT 1", (run_id,)).fetchone()
             if not active:
                 terminal = "CANCELLED" if run["state"] == "CANCELLING" else "FAILED"
@@ -396,9 +421,19 @@ class Execution:
             result["review"] = output["review"]
         if "agent_output" in output:
             result["agent_output"] = output["agent_output"]
+        if "tool_action_id" in output:
+            result["tool_output"] = output
         validate_message(result, "taskResult")
         with connect(self.settings.database_url) as conn:
-            self._lease(conn, claim)
+            lease = self._lease(conn, claim)
+            if lease["spec"]["handler"] == "tool-v1":
+                action = conn.execute("SELECT * FROM tool_actions WHERE run_id=%s AND task_id=%s AND call_key=%s",
+                                      (claim["run_id"], claim["task_id"], lease["spec"]["tool_call"]["call_key"])).fetchone()
+                if not action or action["state"] != "SUCCEEDED":
+                    raise Conflict("Tool completion requires a successful gateway receipt")
+                expected = {"tool_action_id": str(action["id"]), "action_digest": action["action_digest"], "tool_result": action["result"]}
+                if canonical(output) != canonical(expected):
+                    raise Conflict("Tool output must match the authoritative gateway receipt")
             if conn.execute("SELECT 1 FROM operations WHERE run_id=%s AND task_id=%s AND state IN ('RESERVED','DISPATCHED','UNKNOWN') LIMIT 1",
                             (claim["run_id"], claim["task_id"])).fetchone():
                 raise Conflict("Cannot complete a task with unsettled paid operations")

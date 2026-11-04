@@ -1,0 +1,26 @@
+# Explicit opt-in: docker compose -f compose.yaml -f compose.tools.yaml up --build -d
+services:
+  api:
+    environment:
+      AEP_TOOL_CAPABILITIES: ${AEP_TOOL_CAPABILITIES:-text.stats}
+      AEP_TOOL_IMAGE: ${AEP_TOOL_IMAGE:?Build and inspect the sandbox image first}
+      AEP_TOOL_APPROVAL_KEY: ${AEP_TOOL_APPROVAL_KEY:-}
+  worker:
+    environment:
+      AEP_TOOL_CAPABILITIES: ${AEP_TOOL_CAPABILITIES:-text.stats}
+      AEP_TOOL_IMAGE: ${AEP_TOOL_IMAGE:?Build and inspect the sandbox image first}
+  tool-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    environment:
+      DATABASE_URL: postgresql://aep:aep_local_only@postgres:5432/aep
+      AEP_API_KEY: gateway-not-an-api-server
+      AEP_TOOL_CAPABILITIES: ${AEP_TOOL_CAPABILITIES:-text.stats}
+      AEP_TOOL_IMAGE: ${AEP_TOOL_IMAGE:?Build and inspect the sandbox image first}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped

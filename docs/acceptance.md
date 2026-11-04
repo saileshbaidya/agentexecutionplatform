@@ -48,6 +48,21 @@ See [milestone 1](milestone-1.md), [milestone 2](milestone-2.md), and
 - Evaluate a new prompt/model version: create a separate run, measure completion,
   citation support, contradiction handling, latency, usage, and recovery outcomes.
 
+## Secure tools (milestone 5 implemented)
+
+- A forged worker capability list cannot override the stored task spec.
+- A task capability and an independently enabled deployment capability are both
+  required. Unknown tools, extra arguments, and host/network options are rejected.
+- Human approval requires a separate credential and binds exactly to the reviewed
+  action digest, owner/run/task/call key, image, policy, arguments, and expiry.
+- Concurrent dispatch consumes one approval once. Replays cannot extend expiry.
+- Pending approvals hold no lease. Denial, expiry, cancellation, and task deadlines
+  prevent dispatch and wake or terminalize the waiting task.
+- A gateway crash removes the prior container before marking UNKNOWN; no automatic
+  rerun is permitted. Failed cleanup remains a durable obligation.
+- Real-container checks confirm network isolation, read-only root, nonroot UID,
+  dropped capabilities, absent credentials/mounts, and bounded compute/output.
+
 ## Azure pilot
 
 - Authenticated deployment runs the example, recovers after worker termination,

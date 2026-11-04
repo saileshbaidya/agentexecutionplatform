@@ -20,6 +20,8 @@ def main():
     scheduler.add_argument("--once", action="store_true", help="Perform one maintenance pass")
     reconciler = commands.add_parser("reconciler", help="Poll provider evidence and settle accounting independently of scheduling")
     reconciler.add_argument("--once", action="store_true", help="Reconcile one bounded batch")
+    gateway = commands.add_parser("tool-gateway", help="Dispatch approved tools into isolated Docker containers")
+    gateway.add_argument("--once", action="store_true", help="Dispatch one bounded batch")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     settings = Settings.from_env()
@@ -41,6 +43,9 @@ def main():
         elif args.command == "reconciler":
             from .reconciler import run_reconciler
             run_reconciler(settings, stop=stop, once=args.once)
+        elif args.command == "tool-gateway":
+            from .tool_gateway import run_gateway
+            run_gateway(settings, stop=stop, once=args.once)
         else:
             from .worker import run_worker
             run_worker(settings, stop=stop, once=args.once, worker_id=args.worker_id)

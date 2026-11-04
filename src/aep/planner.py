@@ -11,6 +11,7 @@ HANDLERS = {
     "fake-review-v1": ("evidence_review", set()),
     "fake-writer-v1": ("report_writer", set()),
     "fake-utility-v1": ("utility", set()),
+    "tool-v1": ("utility", {"text.stats", "python.run"}),
 }
 
 
@@ -18,6 +19,13 @@ def validate_executable_plan(plan, allow_agents=False):
     """Validate the graph and the deliberately restricted milestone 2 registry."""
     validate_plan(plan)
     for task in plan["tasks"]:
+        if task["handler"] == "tool-v1":
+            from .tool_policy import validate_call
+            if "tool_call" not in task or "paid_call" in task:
+                raise ValueError("Tool tasks require one tool_call and no paid_call")
+            validate_call(task["tool_call"])
+        elif "tool_call" in task:
+            raise ValueError("Only the tool handler may request tools")
         if task["handler"] in AGENTS:
             if not allow_agents or task["kind"] != AGENTS[task["handler"]]["kind"]:
                 raise ValueError("Agent tasks must be generated through the agent submission mode")

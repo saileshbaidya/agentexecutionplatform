@@ -20,8 +20,17 @@ reachable Azure deployment, require authenticated APIs, managed identity where
 supported, private storage, TLS, secret management, and least-privilege roles.
 Containers alone are not a sufficient boundary for hostile multi-tenant code.
 
+Milestone 5 implements these controls for `text.stats` and opt-in approved
+`python.run`, with no network or persistent external actions. Only the separate
+trusted gateway receives Docker daemon access. The approval credential is injected
+only into the API; workers and tools never receive it. A compromised control-plane
+process or database remains outside this single-owner threat boundary. Real
+container tests verify effective resource, filesystem, identity, and network limits.
+See [the secure tool guide](milestone-5.md) for exact policies and recovery.
+
 Tool specifications declare allowed argument schema, risk class, permissions,
 timeout, cost bound, and idempotency behavior. Sensitive actions require explicit
 human approval of the exact action. Approval waits hold no worker lease or database
 transaction. Expiry or cancellation prevents later dispatch. V1 initially exposes
-only deterministic local read-only tools; the gateway milestone adds external tools.
+only bounded local computation; persistent external tools need their own recovery
+and accounting adapters before registration.

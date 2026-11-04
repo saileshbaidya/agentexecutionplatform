@@ -13,6 +13,8 @@ from .budgets import BudgetDenied, Budgets, OperationPending, ProviderFailure
 from .agents import AgentOutputError, execute_agent
 from .model_provider import ModelCallError
 from .registry import AGENTS
+from .tools import ToolGateway, ToolPending
+from .tool_policy import ToolDenied
 
 
 log = logging.getLogger(__name__)
@@ -43,14 +45,22 @@ def run_claim(engine, claim, stop):
         paid_result = None
         if "paid_call" in claim["spec"]:
             paid_result = Budgets(engine).call(claim, claim["spec"]["paid_call"])
-        output = (execute_agent(engine, claim, should_stop=lambda: lost.is_set() or stop.is_set())
-                  if claim["spec"]["handler"] in AGENTS else execute(claim))
+        if claim["spec"]["handler"] == "tool-v1":
+            output = ToolGateway(engine).call(claim)
+        else:
+            output = (execute_agent(engine, claim, should_stop=lambda: lost.is_set() or stop.is_set())
+                      if claim["spec"]["handler"] in AGENTS else execute(claim))
         if paid_result is not None:
             output["paid_operation"] = paid_result
         if lost.is_set() or stop.is_set():
             raise LeaseLost("Worker stopped or lease lost")
         engine.complete(claim, output)
         log.info("attempt.succeeded run=%s task=%s attempt=%s", claim["run_id"], claim["task_id"], claim["attempt_id"])
+    except ToolPending as pending:
+        try:
+            ToolGateway(engine).park(claim, pending.action_id)
+        except (LeaseLost, psycopg.Error):
+            log.warning("attempt.tool_wait_not_committed attempt=%s", claim["attempt_id"])
     except OperationPending as pending:
         log.info("attempt.waiting_for_operation run=%s operation=%s", claim["run_id"], pending.operation_id)
         try:
@@ -77,6 +87,11 @@ def run_claim(engine, claim, stop):
         log.warning("attempt.agent_error run=%s reason=%s", claim["run_id"], str(invalid))
         try:
             engine.fail(claim, reason=str(invalid), retryable=False)
+        except (LeaseLost, psycopg.Error):
+            log.warning("attempt.failure_not_committed attempt=%s", claim["attempt_id"])
+    except ToolDenied:
+        try:
+            engine.fail(claim, reason="tool_denied", retryable=False)
         except (LeaseLost, psycopg.Error):
             log.warning("attempt.failure_not_committed attempt=%s", claim["attempt_id"])
     except ValueError:

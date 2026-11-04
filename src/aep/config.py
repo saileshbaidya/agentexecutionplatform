@@ -25,10 +25,21 @@ class Settings:
     model_output_rate: int = 0
     model_timeout_seconds: float = 30.0
     inline_reconciliation: bool = True
+    tool_capabilities: tuple[str, ...] = ()
+    tool_image: str = ""
+    tool_approval_key: str = field(default="", repr=False)
 
     def __post_init__(self):
         if not self.api_key or not self.database_url:
             raise ValueError("DATABASE_URL and AEP_API_KEY must be set")
+        if set(self.tool_capabilities) - {"text.stats", "python.run"}:
+            raise ValueError("Unknown deployment tool capability")
+        if self.tool_approval_key and (len(self.tool_approval_key) < 24 or self.tool_approval_key == self.api_key):
+            raise ValueError("Tool approval key must be distinct and at least 24 characters")
+        if self.tool_capabilities:
+            import re
+            if not re.fullmatch(r"sha256:[a-f0-9]{64}", self.tool_image):
+                raise ValueError("Enabled tools require an immutable sandbox image ID")
         if self.openai_api_key and any(ord(c) < 33 or ord(c) > 126 for c in self.openai_api_key):
             raise ValueError("Invalid OpenAI API key format")
         if not 1 <= self.run_concurrency_limit <= 32:
@@ -78,4 +89,7 @@ class Settings:
             model_output_rate=int(os.environ.get("AEP_MODEL_OUTPUT_RATE", "0")),
             model_timeout_seconds=float(os.environ.get("AEP_MODEL_HTTP_TIMEOUT", "30")),
             inline_reconciliation=reconciliation == "true",
+            tool_capabilities=tuple(filter(None, os.environ.get("AEP_TOOL_CAPABILITIES", "").split(","))),
+            tool_image=os.environ.get("AEP_TOOL_IMAGE", ""),
+            tool_approval_key=os.environ.get("AEP_TOOL_APPROVAL_KEY", ""),
         )

@@ -1,5 +1,13 @@
 # Architecture
 
+Milestone 5 adds an opt-in database-backed tool gateway. Workers propose a stored
+task's tool action and park without a lease. A separate dispatcher enforces
+deployment/task capabilities and consumes an exact-action human approval before
+creating an isolated container. Only that trusted dispatcher receives Docker
+daemon access; approval credentials are API-only. Tool results are durable and
+enter downstream input snapshots. See [ADR 0003](decisions/0003-secure-tools.md)
+and [the milestone guide](milestone-5.md) for isolation and recovery boundaries.
+
 ## Boundary
 
 The orchestration engine interprets requests, proposes versioned plans, selects

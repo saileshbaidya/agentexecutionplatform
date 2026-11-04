@@ -34,6 +34,9 @@ committed terminal transition wins. A persisted cancellation prevents success.
 | BLOCKED | READY | All dependencies succeeded |
 | READY | RUNNING | Worker claim creates attempt and lease |
 | RUNNING | SUCCEEDED | Current unexpired lease commits output |
+| RUNNING | TOOL_WAIT | Durable tool action proposed; attempt closed and lease released |
+| TOOL_WAIT | READY | Tool action reached a terminal state; resume with cached outcome |
+| TOOL_WAIT | FAILED, CANCELLED | Task deadline, cancellation, or fail-fast drain |
 | RUNNING | RETRY_WAIT | Retryable failure or lease loss; attempts remain |
 | RETRY_WAIT | READY | Persisted backoff deadline reached |
 | RUNNING | FAILED | Permanent failure or attempts exhausted |
@@ -69,3 +72,19 @@ and immutable accounting corrections do not reopen terminal execution state.
 Retries use capped exponential backoff with jitter and a persisted next-run time.
 Validation, policy denial, and permanent provider errors are not transient retries.
 Task timeout applies across attempts; lease duration is a shorter liveness window.
+
+## Secure tool actions (milestone 5)
+
+Actions: PENDING (approval required) -> READY (human approves) -> RUNNING ->
+SUCCEEDED | FAILED | CANCELLED. PENDING may also become DENIED, EXPIRED, or
+CANCELLED. READY may become DENIED, EXPIRED, or CANCELLED before dispatch.
+An interrupted RUNNING action becomes UNKNOWN only after its container is removed;
+it is never automatically redispatched. Cleanup failures are durably tracked.
+
+The canonical action includes owner, run, task, call key, arguments, policy,
+immutable image ID, and all resource limits. A separate human credential grants a
+single expiring decision. Approval consumption and dispatch commit atomically.
+Changing the reviewed action or policy denies dispatch. TOOL_WAIT attempts are
+closed, have no heartbeat, and do not consume a worker concurrency slot. A resumed
+continuation creates another attempt without treating approval latency as failure.
+See [milestone 5](milestone-5.md) for lifecycle and isolation limitations.

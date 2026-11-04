@@ -10,7 +10,7 @@
    reconciliation, bounded provider adapter contract, and concurrency tests.
 4. **Agent integration (implemented):** bounded planner, agent registry, model adapter,
    evidence contracts, review and report generation, recorded fixtures.
-5. **Secure tools:** gateway, capability enforcement, scoped approvals, isolated
+5. **Secure tools (implemented):** gateway, capability enforcement, scoped approvals, isolated
    execution backend, and negative security tests.
 6. **Context and evaluation:** bounded context snapshots, retention, provenance,
    replay, versioned evaluation datasets, and quality/cost comparisons.

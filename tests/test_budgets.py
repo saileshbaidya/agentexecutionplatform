@@ -102,6 +102,10 @@ class BudgetTests(PostgresFixture, unittest.TestCase):
         self.assert_account(run_id, 0, 60)
 
     def test_unused_reservation_becomes_available_to_another_agent(self):
+        # Direct claims have no worker heartbeat in this accounting test. Keep
+        # host load from turning the budget assertion into a lease-expiry test.
+        self.engine = Execution(replace(self.settings, lease_seconds=30))
+        self.budgets = Budgets(self.engine)
         run_id = self.start_budget()
         first, second = self.engine.claim("one"), self.engine.claim("two")
         self.budgets.call(first, self.spec())
