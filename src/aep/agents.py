@@ -21,6 +21,7 @@ def demo():
 
 
 def build_profile(submission, settings):
+    from .context import RECIPE_VERSION
     config = submission["agent"]
     documents = submission.get("documents", [])
     if not documents:
@@ -34,6 +35,8 @@ def build_profile(submission, settings):
                "max_output_tokens": config.get("max_output_tokens", 2048),
                "max_call_cost_micro_usd": config.get("max_call_cost_micro_usd", 100000),
                "agent_protocol": "agents-v1", "max_repairs": 1}
+    profile["context_byte_limit"] = config.get("context_byte_limit", 48000)
+    profile["context_recipe_version"] = RECIPE_VERSION
     if config["backend"] == "recorded":
         fixture = demo()
         if documents != fixture["documents"] or submission["request"] != fixture["request"] or profile["research_branches"] != 2:
@@ -100,6 +103,9 @@ def context_for(claim):
             context["documents"] = [d for d in claim["documents"] if d["document_id"] in branch["document_ids"]]
         if role == "writer":
             context["review"] = claim["inputs"]["review"]["review"]
+            reviewed = claim["inputs"]["review"]["agent_output"].get("context", {}).get("selected_claim_ids")
+            if reviewed is not None:
+                context["findings"] = [f for f in findings if f["claim_id"] in reviewed]
     return context
 
 
@@ -202,7 +208,9 @@ def execute_agent(engine, claim, should_stop=lambda: False):
     from .model_provider import ModelGateway
     definition = AGENTS[claim["spec"]["handler"]]
     role, profile = definition["role"], claim["spec"]["agent_profile"]
-    context = context_for(claim)
+    from .context import Contexts
+    assembled = Contexts(engine).assemble(claim) if "context_recipe_version" in profile else None
+    context = assembled["context"] if assembled else context_for(claim)
     payload = {"context": context}
     operation_ids = []
     for step in range(profile["max_repairs"] + 1):
@@ -224,6 +232,10 @@ def execute_agent(engine, claim, should_stop=lambda: False):
         raise LeaseLost("Agent stopped")
     output = {"agent_output": {"agent_id": claim["spec"]["handler"], "prompt_version": definition["prompt_version"],
                                "data": value, "operation_ids": operation_ids, "model": profile["model"]}}
+    if assembled:
+        output["agent_output"]["context"] = {"snapshot_id": str(assembled["id"]), "digest": assembled["context_digest"],
+                                           "manifest_digest": assembled["manifest_digest"],
+                                           "selected_claim_ids": assembled["manifest"]["selected_claim_ids"]}
     if role == "research":
         output.update(findings=value["findings"], limitations=value["limitations"])
     if role == "review":

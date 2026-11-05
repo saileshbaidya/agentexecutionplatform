@@ -15,6 +15,12 @@ from .execution import Conflict, LeaseLost, NotFound, canonical, event
 from .providers import FakeProvider, OutcomeUnknown, quote_call, usage_cost
 
 
+def accounting_evidence(receipt):
+    """Keep immutable accounting evidence without retaining generated payloads."""
+    return {**{key: value for key, value in receipt.items() if key != "result"},
+            "evidence_version": "usage-v2", "result_digest": hashlib.sha256(canonical(receipt.get("result"))).hexdigest()}
+
+
 class BudgetDenied(Exception):
     code = "budget_exhausted"
 
@@ -210,7 +216,7 @@ class Budgets:
             WHERE id=%s RETURNING *""", (state, Jsonb(receipt), error, operation["id"])).fetchone()
         conn.execute("""INSERT INTO usage_ledger(run_id,operation_id,entry_key,kind,amount_micro_usd,reason,evidence)
             VALUES (%s,%s,%s,'CHARGE',%s,%s,%s)""", (run["id"], operation["id"], "charge:" + str(operation["id"]),
-            actual, "provider_receipt", Jsonb(receipt)))
+            actual, "provider_receipt", Jsonb(accounting_evidence(receipt))))
         event(conn, run["id"], "budget.settled", operation_id=str(operation["id"]), task_id=operation["task_id"],
               actual_micro_usd=actual, released_micro_usd=max(0, reservation["amount_micro_usd"] - actual))
         if breached:

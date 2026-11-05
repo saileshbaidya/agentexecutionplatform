@@ -12,7 +12,9 @@ import psycopg
 
 from .config import Settings
 from .db import connect
-from .execution import Conflict, Execution, NotFound
+from .execution import Conflict, Execution, NotFound, Gone
+from .context import Contexts
+from .agents import AgentOutputError
 from .budgets import Budgets
 from .registry import AGENTS
 from .model_provider import ModelProvider
@@ -45,6 +47,14 @@ def create_app(settings=None):
     async def conflict(request, exc):
         return JSONResponse(status_code=409, content={"detail": str(exc)})
 
+    @app.exception_handler(Gone)
+    async def gone(request, exc):
+        return JSONResponse(status_code=410, content={"detail": str(exc)})
+
+    @app.exception_handler(AgentOutputError)
+    async def provenance_error(request, exc):
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
     @app.exception_handler(psycopg.Error)
     async def database_error(request, exc):
         return JSONResponse(status_code=503, content={"detail": "Database unavailable; retry with the same idempotency key"})
@@ -56,7 +66,7 @@ def create_app(settings=None):
     @app.get("/health/ready")
     def ready():
         with connect(settings.database_url) as conn:
-            if not conn.execute("SELECT 1 FROM schema_migrations WHERE name='005_secure_tools.sql'").fetchone():
+            if not conn.execute("SELECT 1 FROM schema_migrations WHERE name='006_context_evaluation.sql'").fetchone():
                 raise HTTPException(status_code=503, detail="Migrations not applied")
         return {"status": "ready"}
 
@@ -105,6 +115,23 @@ def create_app(settings=None):
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return JSONResponse(status_code=201 if created else 200,
                             content={"run_id": run_id, "created": created}, headers={"Location": f"/runs/{run_id}"})
+
+    @app.get("/runs/{run_id}/contexts/{task_id}", dependencies=[Depends(authenticated)])
+    def context(run_id: UUID, task_id: str):
+        return jsonable_encoder(Contexts(engine).get(run_id, task_id))
+
+    @app.get("/runs/{run_id}/provenance", dependencies=[Depends(authenticated)])
+    def provenance(run_id: UUID):
+        return jsonable_encoder(Contexts(engine).provenance(run_id))
+
+    @app.post("/runs/{run_id}/replay", dependencies=[Depends(authenticated)])
+    def replay(run_id: UUID):
+        return Contexts(engine).replay(run_id)
+
+    @app.get("/evaluations/{batch_id}", dependencies=[Depends(authenticated)])
+    def evaluation(batch_id: UUID):
+        from .evaluation import Evaluations
+        return jsonable_encoder(Evaluations(settings).report(batch_id))
 
     @app.get("/runs/{run_id}", dependencies=[Depends(authenticated)])
     def status(run_id: UUID):

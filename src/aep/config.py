@@ -28,10 +28,14 @@ class Settings:
     tool_capabilities: tuple[str, ...] = ()
     tool_image: str = ""
     tool_approval_key: str = field(default="", repr=False)
+    worker_pool: str = "default"
 
     def __post_init__(self):
         if not self.api_key or not self.database_url:
             raise ValueError("DATABASE_URL and AEP_API_KEY must be set")
+        import re
+        if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}", self.worker_pool):
+            raise ValueError("Invalid worker pool")
         if set(self.tool_capabilities) - {"text.stats", "python.run"}:
             raise ValueError("Unknown deployment tool capability")
         if self.tool_approval_key and (len(self.tool_approval_key) < 24 or self.tool_approval_key == self.api_key):
@@ -92,4 +96,5 @@ class Settings:
             tool_capabilities=tuple(filter(None, os.environ.get("AEP_TOOL_CAPABILITIES", "").split(","))),
             tool_image=os.environ.get("AEP_TOOL_IMAGE", ""),
             tool_approval_key=os.environ.get("AEP_TOOL_APPROVAL_KEY", ""),
+            worker_pool=os.environ.get("AEP_WORKER_POOL", "default"),
         )

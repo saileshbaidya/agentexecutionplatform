@@ -12,7 +12,7 @@
    evidence contracts, review and report generation, recorded fixtures.
 5. **Secure tools (implemented):** gateway, capability enforcement, scoped approvals, isolated
    execution backend, and negative security tests.
-6. **Context and evaluation:** bounded context snapshots, retention, provenance,
+6. **Context and evaluation (implemented):** bounded context snapshots, retention, provenance,
    replay, versioned evaluation datasets, and quality/cost comparisons.
 7. **Azure pilot:** deployment architecture decision, infrastructure as code,
    authenticated access, secrets, tracing, recovery checks, and cleanup guide.

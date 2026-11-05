@@ -30,6 +30,10 @@ class LeaseLost(Exception):
     pass
 
 
+class Gone(Exception):
+    pass
+
+
 def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
@@ -67,11 +71,11 @@ class Execution:
         digest = hashlib.sha256(canonical(normalized)).hexdigest()
         with connect(self.settings.database_url) as conn:
             created = conn.execute("""INSERT INTO runs
-                (id,owner_id,idempotency_key,input_hash,submission,state,deadline_at,max_concurrency,agent_profile)
-                VALUES (%s,%s,%s,%s,%s,'SUBMITTED',clock_timestamp()+(%s * interval '1 second'),%s,%s)
+                (id,owner_id,idempotency_key,input_hash,submission,state,deadline_at,max_concurrency,agent_profile,execution_pool)
+                VALUES (%s,%s,%s,%s,%s,'SUBMITTED',clock_timestamp()+(%s * interval '1 second'),%s,%s,%s)
                 ON CONFLICT(owner_id,idempotency_key) DO NOTHING RETURNING id""",
                 (uuid4(), owner, submission["idempotency_key"], digest, Jsonb(normalized), submission["timeout_seconds"], concurrency,
-                 Jsonb(profile) if profile else None)).fetchone()
+                 Jsonb(profile) if profile else None, self.settings.worker_pool)).fetchone()
             run = conn.execute("SELECT * FROM runs WHERE owner_id=%s AND idempotency_key=%s FOR UPDATE",
                                (owner, submission["idempotency_key"])).fetchone()
             if run["input_hash"] != digest:
@@ -92,7 +96,7 @@ class Execution:
             conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
             run = conn.execute("""SELECT id,state,failure,final_artifact_id,created_at,updated_at,
                 deadline_at,event_sequence,plan,max_concurrency,cancel_requested_at,cancel_requested_by,
-                cancel_reason,agent_profile FROM runs WHERE id=%s AND owner_id=%s""", (run_id, owner)).fetchone()
+                cancel_reason,agent_profile,execution_pool,payload_purged_at FROM runs WHERE id=%s AND owner_id=%s""", (run_id, owner)).fetchone()
             if not run:
                 raise NotFound("Run not found")
             run["tasks"] = conn.execute("""SELECT id,state,attempt_count,fencing_token,first_started_at,next_run_at,result,
@@ -136,6 +140,11 @@ class Execution:
 
     def artifact(self, run_id, artifact_id, owner="local"):
         with connect(self.settings.database_url) as conn:
+            run = conn.execute("SELECT payload_purged_at FROM runs WHERE id=%s AND owner_id=%s", (run_id, owner)).fetchone()
+            if not run:
+                raise NotFound("Run not found")
+            if run["payload_purged_at"]:
+                raise Gone("Run payloads were removed by retention")
             metadata = conn.execute("""SELECT a.* FROM artifacts a JOIN runs r ON r.id=a.run_id
                 WHERE a.run_id=%s AND a.id=%s AND r.owner_id=%s""", (run_id, artifact_id, owner)).fetchone()
             if not metadata:
@@ -300,11 +309,11 @@ class Execution:
 
     def claim(self, worker_id):
         with connect(self.settings.database_url) as conn:
-            run = conn.execute("""SELECT r.* FROM runs r WHERE r.state='RUNNING' AND r.failure IS NULL
+            run = conn.execute("""SELECT r.* FROM runs r WHERE r.state='RUNNING' AND r.failure IS NULL AND r.execution_pool=%s
                 AND EXISTS(SELECT 1 FROM tasks t WHERE t.run_id=r.id AND t.state='READY')
                 AND (SELECT count(*) FROM tasks active WHERE active.run_id=r.id AND active.state='RUNNING') < r.max_concurrency
                 ORDER BY r.last_claimed_at ASC NULLS FIRST,r.created_at,r.id
-                FOR UPDATE OF r SKIP LOCKED LIMIT 1""").fetchone()
+                FOR UPDATE OF r SKIP LOCKED LIMIT 1""", (self.settings.worker_pool,)).fetchone()
             if not run:
                 return None
             self._advance(conn, run["id"])
@@ -426,6 +435,17 @@ class Execution:
         validate_message(result, "taskResult")
         with connect(self.settings.database_url) as conn:
             lease = self._lease(conn, claim)
+            if lease["spec"].get("agent_profile", {}).get("context_recipe_version"):
+                from .context import verify_snapshot
+                snapshot = conn.execute("SELECT * FROM context_snapshots WHERE run_id=%s AND task_id=%s", (claim["run_id"], claim["task_id"])).fetchone()
+                marker = output.get("agent_output", {}).get("context", {})
+                if not snapshot:
+                    raise Conflict("Agent completion requires a context snapshot")
+                verify_snapshot(snapshot)
+                expected = {"snapshot_id": str(snapshot["id"]), "digest": snapshot["context_digest"],
+                            "manifest_digest": snapshot["manifest_digest"], "selected_claim_ids": snapshot["manifest"]["selected_claim_ids"]}
+                if marker != expected:
+                    raise Conflict("Agent output context provenance mismatch")
             if lease["spec"]["handler"] == "tool-v1":
                 action = conn.execute("SELECT * FROM tool_actions WHERE run_id=%s AND task_id=%s AND call_key=%s",
                                       (claim["run_id"], claim["task_id"], lease["spec"]["tool_call"]["call_key"])).fetchone()

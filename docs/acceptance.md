@@ -63,6 +63,22 @@ See [milestone 1](milestone-1.md), [milestone 2](milestone-2.md), and
 - Real-container checks confirm network isolation, read-only root, nonroot UID,
   dropped capabilities, absent credentials/mounts, and bounded compute/output.
 
+## Context and evaluation (milestone 6 implemented)
+
+- Context selection is deterministic and bounded, records omissions, preserves
+  exact original source ranges, and never silently drops mandatory review claims.
+- Retries reuse a saved context; altered inputs, prompts, snapshots, manifests,
+  or forged output context markers are rejected before untracked spending/results.
+- Authenticated provenance traces source hashes through model calls to artifacts.
+- Offline replay validates saved receipts and outputs without provider/tool calls.
+- Retention defaults to dry-run, rejects active/unsettled/evaluating work, returns
+  410 for purged payloads, and resumes failed file cleanup without changing ledger history.
+- Default workers cannot claim evaluation pool work. Public input cannot enable faults.
+- Versioned datasets exercise lease loss, worker loss after receipt, corrupted
+  contexts, cancellation, and budget denial. Identical keys resume without new spend.
+- Matching datasets compare across runtime/model versions; incompatible datasets
+  and incomplete batches are rejected. Saved metrics survive operational retention.
+
 ## Azure pilot
 
 - Authenticated deployment runs the example, recovers after worker termination,

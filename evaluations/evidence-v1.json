@@ -1,0 +1,70 @@
+{
+  "schema_version": "1",
+  "dataset_id": "capacity-evidence-and-recovery",
+  "version": "1",
+  "fixture_digest": "19c938a3efcb34a547b4861e76dff6860f1fd30579a88df0ff88ce2392853696",
+  "cases": [
+    {
+      "case_id": "contradictory-evidence",
+      "fault": "none",
+      "budget_micro_usd": 1000000,
+      "expected_state": "SUCCEEDED",
+      "min_findings": 2,
+      "unresolved_conflicts": 1,
+      "expected_statements": ["The north audit reports a capacity of 10 units.", "The south audit reports a capacity of 12 units."],
+      "max_operations": 5
+    },
+    {
+      "case_id": "expired-worker",
+      "fault": "lease_expiry",
+      "budget_micro_usd": 1000000,
+      "expected_state": "SUCCEEDED",
+      "min_findings": 2,
+      "unresolved_conflicts": 1,
+      "expected_statements": [],
+      "max_operations": 5
+    },
+    {
+      "case_id": "receipt-before-worker-crash",
+      "fault": "after_model_receipt",
+      "budget_micro_usd": 1000000,
+      "expected_state": "SUCCEEDED",
+      "min_findings": 2,
+      "unresolved_conflicts": 1,
+      "expected_statements": [],
+      "max_operations": 5
+    },
+    {
+      "case_id": "tampered-context",
+      "fault": "context_corruption",
+      "budget_micro_usd": 1000000,
+      "expected_state": "FAILED",
+      "expected_failure": "context_integrity_error",
+      "min_findings": 0,
+      "unresolved_conflicts": 0,
+      "expected_statements": [],
+      "max_operations": 0
+    },
+    {
+      "case_id": "cancelled-worker",
+      "fault": "cancel_after_claim",
+      "budget_micro_usd": 1000000,
+      "expected_state": "CANCELLED",
+      "min_findings": 0,
+      "unresolved_conflicts": 0,
+      "expected_statements": [],
+      "max_operations": 0
+    },
+    {
+      "case_id": "denied-budget",
+      "fault": "none",
+      "budget_micro_usd": 0,
+      "expected_state": "FAILED",
+      "expected_failure": "budget_exhausted",
+      "min_findings": 0,
+      "unresolved_conflicts": 0,
+      "expected_statements": [],
+      "max_operations": 0
+    }
+  ]
+}

@@ -51,6 +51,14 @@ express. Both schema and semantic validation are mandatory at admission.
 Runtime API responses, events, approval messages, and database models will be
 specified with their implementing milestones. They are not frozen by this schema.
 
+Milestone 6 adds `agent.context_byte_limit` (2,048–128,000 canonical UTF-8 JSON
+bytes, default 48,000). New server-owned agent profiles freeze a context recipe.
+`agent_output.context` links to its snapshot, context/manifest hashes, and selected
+claim IDs. Provider token preflight remains authoritative for full request limits.
+Execution pools, retention markers, fault controls, and evaluation configuration
+are server-owned and cannot be supplied through the public run schema. See
+[milestone 6](../../docs/milestone-6.md) for provenance, replay, and retention APIs.
+
 Milestone 5 adds optional `task.tool_call` (call key, registered tool name, and
 strict tool-specific arguments), valid only on `tool-v1` utility tasks. Both the
 stored task capability and deployment policy must permit the action. Completed

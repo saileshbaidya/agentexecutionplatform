@@ -53,3 +53,19 @@ class LocalArtifacts:
         if hashlib.sha256(content).hexdigest() != metadata["sha256"]:
             raise ValueError("Artifact checksum mismatch")
         return content
+
+    def delete(self, run_id, key):
+        """Delete one committed digest file, never a directory or outside path."""
+        run_id = str(UUID(str(run_id)))
+        if not re.fullmatch(re.escape(run_id) + r"/[a-f0-9]{64}", key):
+            raise ValueError("Invalid retention storage key")
+        path = self.root / key
+        if path.parent.is_symlink() or path.is_symlink() or self.root not in path.resolve().parents:
+            raise ValueError("Retention path escapes storage root or uses a symlink")
+        path.unlink(missing_ok=True)
+        if os.name != "nt" and path.parent.exists():
+            fd = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(fd)
+            finally:
+                os.close(fd)

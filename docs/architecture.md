@@ -1,5 +1,12 @@
 # Architecture
 
+Milestone 6 adds task-scoped immutable context snapshots, provenance manifests,
+offline receipt/output replay, terminal payload retention with durable file cleanup,
+and versioned evaluations in private execution pools. New charge evidence stores
+generated-result hashes instead of result text. The [milestone guide](milestone-6.md)
+and [ADR 0004](decisions/0004-context-evaluation.md) describe versioning and retention
+boundaries.
+
 Milestone 5 adds an opt-in database-backed tool gateway. Workers propose a stored
 task's tool action and park without a lease. A separate dispatcher enforces
 deployment/task capabilities and consumes an exact-action human approval before

@@ -2,12 +2,16 @@
 
 A platform that separates agent reasoning from durable, policy-controlled execution.
 
-Milestones 0–5 provide the design contracts and a PostgreSQL-backed execution
+Milestones 0–6 provide the design contracts and a PostgreSQL-backed execution
 core with an API, concurrent deterministic workers, DAG scheduling, cancellation,
 leases, retries, crash recovery, shared budget enforcement, and versioned agents.
 Agent runs support a recorded demonstration and opt-in OpenAI model calls over
 supplied documents. Secure tools use an opt-in isolated gateway with capability
 checks and exact-action approvals. Azure deployment is a later milestone.
+
+Agent context snapshots now record bounded evidence selection and provenance.
+Versioned evaluation datasets exercise recovery and compare cost/quality checks;
+explicit retention removes eligible operational payloads while preserving audit.
 
 ## Run the platform
 
@@ -31,6 +35,10 @@ $env:AEP_API_KEY = 'local-development-only'
 ```
 
 ## Design
+
+See the [milestone 6 guide](docs/milestone-6.md) for context assembly, authenticated
+provenance and offline replay, retention dry runs, evaluation datasets, fault
+injection, and comparisons across runtime/model versions.
 
 See the [milestone 5 guide](docs/milestone-5.md) for the opt-in Docker tool gateway,
 capability policy, separate approval credential, isolation, and security tests.
